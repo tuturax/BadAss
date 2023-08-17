@@ -229,7 +229,14 @@ class model:
 
     #############################################################################
     ##################   Function to read a CSV/XLS file  #######################
-    def read_CSV(self, file : str) :
+    def read_CSV(self, file = "./Exemples/XLS/ecoli_core_model.xls") :
+        ### Description of the fonction
+        """
+        Fonction read an Excel file
+            
+        file     : string the specify the directory of the Excel file
+
+        """
 
         df = pd.read_excel(file)
         N = df.drop(df.columns[0], axis=1)
@@ -249,7 +256,14 @@ class model:
 
     #############################################################################
     ###################   Function to read a SBML file  #########################
-    def read_SBML(self, file : str) :
+    def read_SBML(self, file = "./Exemples/SBML/E_coli_CCM.xml") :
+        ### Description of the fonction
+        """
+        Fonction read a SBML file
+            
+        file     : string the specify the directory of the SBML file
+
+        """
         import libsbml
         
         reader = libsbml.SBMLReader()
@@ -264,11 +278,46 @@ class model:
             print(f"0 error detected in your SBML file")
             model = document.getModel()
 
-            m = model.getNumSpecies()
-            list_meta_model = []
-            for i in range(m) :
-                list_meta_model.append(model.getModel().getSpecies(i).getName())
-            
+            N = pd.DataFrame(dtype=float)
+
+            for reaction in model.reactions :
+                
+                N[reaction.getName()] = pd.Series([0] * len(N.index), dtype = 'float64')
+
+
+                reactants = reaction.getListOfReactants()
+                for reactant in reactants :
+                    specie = model.getSpecies(reactant.getSpecies())
+                    stoichio = reactant.getStoichiometry()
+                    
+                    if specie.getName() not in N.index :
+                        N.loc[specie.getName()] = pd.Series([0] * len(N.columns), index=N.columns, dtype = 'float64')
+
+                    N.loc[specie.getName(), reaction.getName()] = stoichio
+                    
+
+
+                products = reaction.getListOfProducts()
+                for product in products :
+                    specie = model.getSpecies(product.getSpecies())
+                    stoichio = product.getStoichiometry()
+
+                    if specie.getName() not in N.index :
+                        N.loc[specie.getName()] = pd.Series([0] * len(N.columns), index=N.columns, dtype = 'float64')
+
+                    N.loc[specie.getName(), reaction.getName()] = stoichio
+
+                list_species = []
+                for specie in model.species :
+                    list_species.append(specie.getName())
+                for specie in list_species :
+                    if specie not in N.index :
+                        N.loc[specie] = pd.Series([0] * len(N.columns), index=N.columns, dtype = 'float64')
+                
+                N.fillna(0, inplace=True)
+
+            self.Stoichio_matrix = N
+
     #############################################################################
     ###################   Function to check the model   #########################
     @property
