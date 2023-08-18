@@ -97,6 +97,12 @@ class model:
         return np.dot(self.elasticity.s.to_numpy() , self.R_s_c)
     
     @property
+    def R(self) :
+        return( np.block([[self.R_s_p ],
+
+                          [self.R_v_p ]   ])       )
+    
+    @property
     def enzyme(self) :
         return self._enzyme
 
