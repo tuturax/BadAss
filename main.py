@@ -4,10 +4,11 @@
 import numpy as np
 import pandas as pd
 
-from layer_1.reactions   import Reaction_class
-from layer_1.metabolites import Metabolite_class
-from layer_1.parameters  import Parameter_class
+from layer_1.reactions    import Reaction_class
+from layer_1.metabolites  import Metabolite_class
+from layer_1.parameters   import Parameter_class
 from layer_1.elasticities import Elasticity_class
+from layer_1.enzymes      import Enzymes_class
             
 #####################
 # Class model
@@ -26,13 +27,16 @@ class model:
     def __init__(self):
 
         # Call of reaction Class
-        self._reactions   = Reaction_class(self)
+        self.__reactions   = Reaction_class(self)
         # Call of metabolite Class
-        self._metabolites = Metabolite_class(self)
+        self.__metabolites = Metabolite_class(self)
         # Call of elasticity Class
-        self._elasticities = Elasticity_class(self)
+        self.__elasticities = Elasticity_class(self)
         # Call of parameter Class
-        self._parameters  = Parameter_class(self)
+        self.__parameters  = Parameter_class(self)
+        # Call of enzyme Class
+        self.__enzymes  = Enzymes_class(self)
+
 
 
 
@@ -44,7 +48,13 @@ class model:
         # Initialisation of the dynamic attributes
         self._Jacobien_reversed = np.array([])
 
-        print("Model created \n \nTo add metabolite, use .add_meta \nTo add reaction,   use .add_reaction")
+        print("Model created \n \nTo add metabolite, use .metabolites.add_meta \nTo add reaction,   use .reactions.add_reaction")
+
+    #################################################################################
+    ######    Representation = the Dataframe of the Stoichiometric matrix     #######
+    def __repr__(self) -> str:
+        return str(self._Stoichio_matrix)
+
 
     #############################################################################
     ##################              Getter                  #####################
@@ -54,19 +64,23 @@ class model:
 
     @property
     def reactions(self) :
-        return self._reactions
+        return self.__reactions
     
     @property
     def metabolites(self) :
-        return self._metabolites
+        return self.__metabolites
     
     @property
+    def enzymes(self) :
+        return self.__enzymes
+
+    @property
     def parameters(self) :
-        return self._parameters
+        return self.__parameters
 
     @property
     def elasticity(self) :
-        return self._elasticities
+        return self.__elasticities
     
 
     # Dynamic property
@@ -77,42 +91,74 @@ class model:
     
     @property
     def Jacobian_reversed(self) :
-        J_inv = np.linalg.pinv(self.Jacobian.to_numpy())
-        return J_inv
+        J_inv_matrix = np.linalg.pinv(self.Jacobian.to_numpy())
+        J_inv_df = pd.DataFrame(J_inv_matrix, columns=self.Jacobian.index, index=self.Jacobian.columns)
+        return J_inv_df
+    @property
+    def __Jacobian_reversed(self) :
+        return  np.linalg.pinv(self.Jacobian.to_numpy())
     
+    # The attibute with __ are the one compute with numpy and aim to be call for other compuation
+    # The attribute without it are only the representation of the them on dataframe
+    @property
+    def __R_s_p(self) :
+        return -np.dot(self.__Jacobian_reversed , np.dot(self.Stoichio_matrix.to_numpy() , self.elasticity.p.to_numpy() ))
     @property
     def R_s_p(self) :
-        return -np.dot(self.Jacobian_reversed , np.dot(self.Stoichio_matrix.to_numpy() , self.elasticity.p.to_numpy() ))
+        return pd.DataFrame(self.__R_s_p, index = self.metabolites.df.index, columns = self.parameters.df.index)
     
+    @property
+    def __R_v_p(self) :
+        return np.dot(self.elasticity.s.to_numpy() , self.__R_s_p) + self.elasticity.p.to_numpy()
     @property
     def R_v_p(self) :
-        return np.dot(self.elasticity.s.to_numpy() , self.R_s_p) + self.elasticity.p.to_numpy()
+        return pd.DataFrame(self.__R_v_p, index = self.reactions.df.index, columns = self.parameters.df.index)
     
+    @property
+    def __R_s_c(self) :
+        return -np.dot(self.Jacobian_reversed , np.dot(self.Stoichio_matrix.to_numpy() , self.elasticity.s.to_numpy() ) ) + np.identity(len(self.Stoichio_matrix.to_numpy()))
     @property
     def R_s_c(self) :
-        return -np.dot(self.Jacobian_reversed , np.dot(self.Stoichio_matrix.to_numpy() , self.elasticity.s.to_numpy() ) ) + np.identity(len(self.Stoichio_matrix.to_numpy()))
+        return pd.DataFrame(self.__R_s_c, index = self.metabolites.df.index, columns = self.metabolites.df.index)
     
+    @property
+    def __R_v_c(self) :
+        return np.dot(self.elasticity.s.to_numpy() , self.__R_s_c)
     @property
     def R_v_c(self) :
-        return np.dot(self.elasticity.s.to_numpy() , self.R_s_c)
-    
+        return pd.DataFrame(self.__R_v_c, index = self.reactions.df.index, columns = self.metabolites.df.index)
+
     @property
-    def R(self) :
+    def __R(self) :
         return( np.block([[self.R_s_p ],
 
                           [self.R_v_p ]   ])       )
+    @property
+    def R(self) :
+        return pd.DataFrame(self.__R, index = self.metabolites.df.index.to_list() + self.reactions.df.index.to_list() , columns=self.parameters.df.index)
+
+
+    @property
+    def Standard_deviations(self) :
+        SD = self.parameters.df['Standard deviation']
+        return SD
     
     @property
-    def enzyme(self) :
-        return self._enzyme
+    def __covariance(self) :
 
-    #################################################################################
-    ######    Representation = the Dataframe of the Stoichiometric matrix     #######
-    def __repr__(self) -> str:
-        return str(self._Stoichio_matrix)
+        matrix_covariance_dx = np.identity(len(self.Standard_deviations))
+        for i in range(len(matrix_covariance_dx)) :
+            matrix_covariance_dx[i][i] = self.Standard_deviations[i]**2
+        
+        matrix_RC = np.dot(self.R , matrix_covariance_dx)
 
+        return(       np.block([[   matrix_covariance_dx              ,                     np.transpose(matrix_RC)         ],
 
-    
+                                [   matrix_RC                         ,         np.dot(matrix_RC,np.transpose(self.R))      ]      ])  ) 
+    @property
+    def covariance(self) :
+        return pd.DataFrame(self.__covariance, index = self.parameters.df.index.to_list() + self.R.index.to_list(), columns = self.parameters.df.index.to_list() + self.R.index.to_list())
+
 
     #############################################################################
     #############   Function to update after a modification of N  ###############
@@ -186,10 +232,30 @@ class model:
             if reaction not in self.elasticity.p.index :
                 self.elasticity.p.loc[reaction] = [0 for i in self.elasticity.p.columns]
 
+    
 
+    #################################################################################
+    ############     Function that return the correlation coefficient    ############
+    def rho(self, Absolute = False, deleted = [], dtype = float) :
+        ### Description of the fonction
+        """
+        Fonction to compute the correlation coefficient
+        """
+        rho = np.zeros((self.__covariance.shape[0], self.__covariance.shape[1]), dtype=dtype)
+        
+        if Absolute == True :
+            for i in range(self.__covariance.shape[0]) :
+                for j in range(self.__covariance.shape[1]) :
+                    rho[i][j] = (self.__covariance[i][j])/((np.abs(self.__covariance[i][i])*np.abs(self.__covariance[j][j]))**0.5)
+        
+        else :
+            for i in range(self.__covariance.shape[0]) :
+                for j in range(self.__covariance.shape[1]) :
+                    rho[i][j] = (self.__covariance[i][j])/((np.real(self.__covariance[i][i])*np.real(self.__covariance[j][j]))**0.5)
 
+        return pd.DataFrame(rho, index = self.covariance.index, columns=self.covariance.columns)
 
-       
+    
         
     #############################################################################
     ###############  Function to creat a simple linear network ##################
@@ -243,6 +309,11 @@ class model:
         file     : string the specify the directory of the Excel file
 
         """
+        self.parameters.df.reset_index(inplace=True)
+        self.enzymes.df.reset_index(inplace=True)
+        self.elasticity.s.reset_index(inplace=True)
+        self.elasticity.p.reset_index(inplace=True)
+        
 
         df = pd.read_excel(file)
         N = df.drop(df.columns[0], axis=1)
@@ -271,6 +342,8 @@ class model:
 
         """
         import libsbml
+
+        self.reset
         
         reader = libsbml.SBMLReader()
 
@@ -358,3 +431,8 @@ class model:
 
         return(unused_reactions, unused_metabolites)
 
+    #############################################################################
+    ###################   Function to reset the model   #########################
+    @property
+    def reset(self) :
+        self.__init__()

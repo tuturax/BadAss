@@ -58,7 +58,7 @@ class Elasticity_class:
                 self._s = matrix
 
         else :
-            raise TypeError("Please enter a numpy matrix  or Pandas datafrmae to fill the E_s matrix")
+            raise TypeError("Please enter a numpy matrix or Pandas dataframe to fill the E_s matrix")
         
 
     # For the E_p matrix
