@@ -61,7 +61,10 @@ class model:
     @property
     def Stoichio_matrix(self) :
         return self._Stoichio_matrix
-
+    
+    @property
+    def __Stoichio_matrix(self) :
+        return self.Stoichio_matrix.to_numpy()
     @property
     def reactions(self) :
         return self.__reactions
@@ -82,27 +85,30 @@ class model:
     def elasticity(self) :
         return self.__elasticities
     
-
-    # Dynamic property
-    @property
-    def Jacobian(self) :
-        J = self.Stoichio_matrix @ self.elasticity.s
-        return J
-    
-    @property
-    def Jacobian_reversed(self) :
-        J_inv_matrix = np.linalg.pinv(self.Jacobian.to_numpy())
-        J_inv_df = pd.DataFrame(J_inv_matrix, columns=self.Jacobian.index, index=self.Jacobian.columns)
-        return J_inv_df
-    @property
-    def __Jacobian_reversed(self) :
-        return  np.linalg.pinv(self.Jacobian.to_numpy())
-    
+   
     # The attibute with __ are the one compute with numpy and aim to be call for other compuation
     # The attribute without it are only the representation of the them on dataframe
+    
+    # Dynamic property
+    @property
+    def __Jacobian(self) :
+        return np.dot(self.Stoichio_matrix.to_numpy() , self.elasticity.s.to_numpy() )
+    @property
+    def Jacobian(self) :
+        return pd.DataFrame(self.__Jacobian, index = self.metabolites.df.index, columns = self.elasticity.s.columns)
+
+
+    @property
+    def __Jacobian_reversed(self) :
+        return  np.linalg.pinv(self.__Jacobian)  
+    @property
+    def Jacobian_reversed(self) :
+        return pd.DataFrame(self.__Jacobian_reversed, index=self.Jacobian.columns, columns=self.Jacobian.index)
+
+
     @property
     def __R_s_p(self) :
-        return -np.dot(self.__Jacobian_reversed , np.dot(self.Stoichio_matrix.to_numpy() , self.elasticity.p.to_numpy() ))
+        return -np.dot(self.__Jacobian_reversed , np.dot(self.__Stoichio_matrix , self.elasticity.p.to_numpy() ))
     @property
     def R_s_p(self) :
         return pd.DataFrame(self.__R_s_p, index = self.metabolites.df.index, columns = self.parameters.df.index)
@@ -116,7 +122,7 @@ class model:
     
     @property
     def __R_s_c(self) :
-        return -np.dot(self.Jacobian_reversed , np.dot(self.Stoichio_matrix.to_numpy() , self.elasticity.s.to_numpy() ) ) + np.identity(len(self.Stoichio_matrix.to_numpy()))
+        return -np.dot(self.Jacobian_reversed , np.dot(self.__Stoichio_matrix , self.elasticity.s.to_numpy() ) ) + np.identity(len(self.__Stoichio_matrix))
     @property
     def R_s_c(self) :
         return pd.DataFrame(self.__R_s_c, index = self.metabolites.df.index, columns = self.metabolites.df.index)
@@ -139,16 +145,15 @@ class model:
 
 
     @property
-    def Standard_deviations(self) :
-        SD = self.parameters.df['Standard deviation']
-        return SD
+    def __Standard_deviations(self) :
+        return self.parameters.df['Standard deviation']
     
     @property
     def __covariance(self) :
 
-        matrix_covariance_dx = np.identity(len(self.Standard_deviations))
+        matrix_covariance_dx = np.identity(len(self.__Standard_deviations))
         for i in range(len(matrix_covariance_dx)) :
-            matrix_covariance_dx[i][i] = self.Standard_deviations[i]**2
+            matrix_covariance_dx[i][i] = self.__Standard_deviations[i]**2
         
         matrix_RC = np.dot(self.R , matrix_covariance_dx)
 
@@ -157,7 +162,7 @@ class model:
                                 [   matrix_RC                         ,         np.dot(matrix_RC,np.transpose(self.R))      ]      ])  ) 
     @property
     def covariance(self) :
-        return pd.DataFrame(self.__covariance, index = self.parameters.df.index.to_list() + self.R.index.to_list(), columns = self.parameters.df.index.to_list() + self.R.index.to_list())
+        return pd.DataFrame(self.__covariance, index = (self.parameters.df.index.to_list() + self.R.index.to_list()) , columns = ( self.parameters.df.index.to_list() + self.R.index.to_list() ) )
 
 
     #############################################################################
@@ -241,19 +246,22 @@ class model:
         """
         Fonction to compute the correlation coefficient
         """
-        rho = np.zeros((self.__covariance.shape[0], self.__covariance.shape[1]), dtype=dtype)
+        Cov_df = self.covariance
+        Cov = Cov_df.to_numpy()
+
+        rho = np.zeros((Cov.shape[0], Cov.shape[1]), dtype=dtype)
         
         if Absolute == True :
-            for i in range(self.__covariance.shape[0]) :
-                for j in range(self.__covariance.shape[1]) :
-                    rho[i][j] = (self.__covariance[i][j])/((np.abs(self.__covariance[i][i])*np.abs(self.__covariance[j][j]))**0.5)
+            for i in range(Cov.shape[0]) :
+                for j in range(Cov.shape[1]) :
+                    rho[i][j] = (Cov[i][j])/((np.abs(Cov[i][i])*np.abs(Cov[j][j]))**0.5)
         
         else :
-            for i in range(self.__covariance.shape[0]) :
-                for j in range(self.__covariance.shape[1]) :
-                    rho[i][j] = (self.__covariance[i][j])/((np.real(self.__covariance[i][i])*np.real(self.__covariance[j][j]))**0.5)
+            for i in range(Cov.shape[0]) :
+                for j in range(Cov.shape[1]) :
+                    rho[i][j] = (Cov[i][j])/((np.real(Cov[i][i])*np.real(Cov[j][j]))**0.5)
 
-        return pd.DataFrame(rho, index = self.covariance.index, columns=self.covariance.columns)
+        return pd.DataFrame(rho, index = Cov_df.index , columns = Cov_df.columns)
 
     
         
@@ -432,7 +440,58 @@ class model:
         return(unused_reactions, unused_metabolites)
 
     #############################################################################
+    ###################   Function plot the rho matrix   #########################
+    def plot_rho(self,title = "Correlation", label = True, value_in_cell = True) :
+        import matplotlib
+        import matplotlib.pyplot as plt
+
+        rho_df = self.rho()
+        rho = rho_df.to_numpy()
+
+        fig, ax = plt.subplots()
+        custom_map = matplotlib.colors.LinearSegmentedColormap.from_list( "custom", ["red", "white", "blue"])
+
+        im = plt.imshow(rho, cmap=custom_map, vmin= -1, vmax= 1 )
+
+
+        if label == True :
+            ax.set_xticks(np.arange(len(rho_df.index)), labels=rho_df.index)
+            ax.set_yticks(np.arange(len(rho_df.index)), labels=rho_df.index)
+
+            plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
+                rotation_mode="anchor")
+
+        if value_in_cell == True :
+            for i in range(rho.shape[0]):
+                for j in range(rho.shape[1]):
+                    text = ax.text(j, i, round(rho[i, j],2),
+                            ha="center", va="center", color="black")
+
+
+        ax.set_title(title)
+        fig.tight_layout()
+
+        N_para = self.parameters.df.shape[0]
+        x_p_e = [-0.5, N_para -.5]
+        y_p_e = [N_para -.5, N_para -.5]
+
+        line_width = 1
+        plt.plot(x_p_e,y_p_e, 'black', linewidth=line_width)
+        plt.plot(y_p_e,x_p_e, 'black', linewidth=line_width)
+
+        x_p = [-0.5, N_para -.5]
+        y_p = [N_para -.5, N_para -.5]
+        plt.plot(x_p,y_p, 'black', linewidth=line_width)
+        plt.plot(y_p,x_p, 'black', linewidth=line_width)
+
+        plt.colorbar()
+        plt.show()
+
+    
+    #############################################################################
     ###################   Function to reset the model   #########################
     @property
     def reset(self) :
         self.__init__()
+
+
