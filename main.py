@@ -48,6 +48,9 @@ class model:
         # Initialisation of the dynamic attributes
         self._Jacobien_reversed = np.array([])
 
+        # Sampling file of the model
+        self.data_sampling = pd.DataFrame(columns=["Name","Type", "Standard deviation", "Distribution"])
+
         print("Model created \n \nTo add metabolite, use .metabolites.add_meta \nTo add reaction,   use .reactions.add_reaction")
 
     #################################################################################
@@ -441,19 +444,38 @@ class model:
 
     #############################################################################
     ###################   Function plot the rho matrix   #########################
-    def plot_rho(self,title = "Correlation", label = True, value_in_cell = True) :
+    def plot_rho(self,title = "Correlation", label = True, value_in_cell = True, index_to_keep = []) :
         import matplotlib
         import matplotlib.pyplot as plt
 
+        # Get the rho matrix
         rho_df = self.rho()
+
+        # Look the index to keep for the plot of the matrix 
+        index_to_keep_bis = []
+        # If nothing is specified, we keep everything
+        #else
+        if len(index_to_keep != 0) :
+            # We take a look at every index that the user enter
+            for index in index_to_keep :
+                # If one of them is not in the model, we told him
+                if index not in rho_df.index :
+                    print(f"- {index} is not in the correlation matrix")
+                # else, we keep in memory the index that are in the model
+                else :
+                    index_to_keep_bis.append(index)
+        
+        # Then we create a new matrix with only the index specified
+        rho_df = rho_df.loc[index_to_keep_bis, index_to_keep_bis]
         rho = rho_df.to_numpy()
+
 
         fig, ax = plt.subplots()
         custom_map = matplotlib.colors.LinearSegmentedColormap.from_list( "custom", ["red", "white", "blue"])
 
         im = plt.imshow(rho, cmap=custom_map, vmin= -1, vmax= 1 )
 
-
+        # Display the label next to the axis
         if label == True :
             ax.set_xticks(np.arange(len(rho_df.index)), labels=rho_df.index)
             ax.set_yticks(np.arange(len(rho_df.index)), labels=rho_df.index)
@@ -461,21 +483,25 @@ class model:
             plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
                 rotation_mode="anchor")
 
+        # Display the value of each cell 
         if value_in_cell == True :
             for i in range(rho.shape[0]):
                 for j in range(rho.shape[1]):
                     text = ax.text(j, i, round(rho[i, j],2),
                             ha="center", va="center", color="black")
 
-
+        # Title of the plot
         ax.set_title(title)
         fig.tight_layout()
 
+        # Plot of the black line to separate the parameters from the variables
+        # Width of the line
+        line_width = 1
+        # Number of parameters
         N_para = self.parameters.df.shape[0]
+        # Position of the line
         x_p_e = [-0.5, N_para -.5]
         y_p_e = [N_para -.5, N_para -.5]
-
-        line_width = 1
         plt.plot(x_p_e,y_p_e, 'black', linewidth=line_width)
         plt.plot(y_p_e,x_p_e, 'black', linewidth=line_width)
 
@@ -487,7 +513,73 @@ class model:
         plt.colorbar()
         plt.show()
 
-    
+    #############################################################################
+    ###################   Function sampled the model    #########################
+    def sampling(self, N : int) :
+        # First call of a dataframe in order to initialise the variable with the good shape and get the name of the indexs and columns
+        rho_df = self.rho()
+        self.rho_sampled = self.rho()
+
+        # Variable to identify if all the name of the sampling dataframe are in the model
+        Charon = True
+
+        # We check every name of in the sampling dataframe
+        for index in self.data_sampling.index :
+            type_samp = self.data_sampling.loc[index, "Type"]
+            name = self.data_sampling.loc[index, "Name"]
+
+            if type_samp == "elasticity" :
+                # If the name is not a list in the case of the elasticity, it's bad
+                if type(name) != list :
+                    print("For the elasticity, be sure to use a list of 2 string, the first for the flux name and the second for the differtial of the elasticity")
+                    Charon = False 
+                # If the list have more or less than 2 elements, it's not valide
+                elif len(name) != 2 :
+                    print("For the elasticity, be sure to use a list of 2 string, the first for the flux name and the second for the differtial of the elasticity")
+                    Charon = False
+                else :
+                    # We attribute both elements of the list, the first must be the flux name and second the differential name's
+                    flux, differential = name
+                    # We check if the flux is in the model
+                    if flux not in self.elasticity.p.index :
+                        print(f"The flux name \n{flux}\n is nnot in the elasticity matrix")
+                        Charon = False
+                    elif differential not in self.elasticity.p.columns and differential not in self.elasticity.s.columns : 
+                        print(f"The differential name \n{differential}\n is not in the elasticity matrices E_s and E_p")
+                        Charon = False
+            
+            elif type_samp == "metabolite" :
+                if name not in self.metabolites.df.index :
+                        print(f"The metabolite name \n{name}\n is not in the metabolites dataframe")
+                        Charon = False
+            
+            elif type_samp == "flux" :
+                if name not in self.reactions.df.index :
+                        print(f"The flux name \n{name}\n is not in the reactions dataframe")
+                        Charon = False
+            
+            elif type_samp == "parameter" :
+                if name not in self.parameters.df.index :
+                        print(f"The parameter name \n{name}\n is not in the parameters dataframe")
+                        Charon = False
+
+            elif type_samp == "enzyme" :
+                if name not in self.enzymes.df.index :
+                        print(f"The enzyme name \n{name}\n is not in the enzymes dataframe")
+                        Charon = False
+            
+            else : 
+                print(f"The type \n{type_samp}\n is not available")
+        
+        if Charon == True :
+            1
+            # Lets go 
+
+
+
+
+
+
     #############################################################################
     ###################   Function to reset the model   #########################
     @property
