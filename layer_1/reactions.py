@@ -18,22 +18,17 @@ class Reaction_class:
     #############             Initialisation                #####################
     def __init__(self, class_model_instance):
 
-        super().__init__()
+        #super().__init__()
 
         # Private attribute for the instance of the Main class
         self.__class_model_instance = class_model_instance
         
 
-        self._df = pd.DataFrame(columns= ['Metabolites', 'Equilibrium constant', 'Law'])
+        self.df    = pd.DataFrame(columns= ['Metabolites', 'Equilibrium constant', 'Law'])
         self._flux = pd.DataFrame(columns= ['Concentration (mmol/gDW/h)'])
-
 
     #############################################################################
     ##################              Getter                  #####################
-    @property
-    def df(self) :
-        return self._df
-    
     @property
     def flux(self) :
         return self._flux
@@ -41,13 +36,13 @@ class Reaction_class:
     ################################################################################
     #########           Return the Dataframe of the reactions             ##########
     def __repr__(self) -> str:
-        return str(self._df)
+        return str(self.df)
 
     ################################################################################
     #########        Fonction to return the number of reaction            ##########
     @property
     def len(self) :
-        return len(self._df)
+        return len(self.df)
 
 
 

@@ -52,7 +52,6 @@ class model:
         self.data_sampling = pd.DataFrame(columns=["Name","Type", "Standard deviation", "Distribution"])
 
         print("Model created \n \nTo add metabolite, use .metabolites.add_meta \nTo add reaction,   use .reactions.add_reaction")
-
     #################################################################################
     ######    Representation = the Dataframe of the Stoichiometric matrix     #######
     def __repr__(self) -> str:
@@ -188,7 +187,7 @@ class model:
         if session == "Matrix" :
             # Put the dataframee to 0
             self.metabolites.df.drop(self.metabolites.df.index, inplace=True)
-            self.reactions.df.drop(self.reactions._df.index, inplace=True)
+            self.reactions.df.drop(self.reactions.df.index, inplace=True)
 
         # Deal with the reactions
         # Loop on every reaction of the stoichiometry matrix
@@ -455,7 +454,7 @@ class model:
         index_to_keep_bis = []
         # If nothing is specified, we keep everything
         #else
-        if len(index_to_keep != 0) :
+        if len(index_to_keep) != 0 :
             # We take a look at every index that the user enter
             for index in index_to_keep :
                 # If one of them is not in the model, we told him
@@ -464,7 +463,10 @@ class model:
                 # else, we keep in memory the index that are in the model
                 else :
                     index_to_keep_bis.append(index)
-        
+
+        else :
+            index_to_keep_bis = rho_df.index
+
         # Then we create a new matrix with only the index specified
         rho_df = rho_df.loc[index_to_keep_bis, index_to_keep_bis]
         rho = rho_df.to_numpy()
@@ -516,68 +518,156 @@ class model:
     #############################################################################
     ###################   Function sampled the model    #########################
     def sampling(self, N : int) :
-        # First call of a dataframe in order to initialise the variable with the good shape and get the name of the indexs and columns
-        rho_df = self.rho()
-        self.rho_sampled = self.rho()
 
-        # Variable to identify if all the name of the sampling dataframe are in the model
-        Charon = True
-
+        # If the number of sample asked if < 1 = bad
+        if N < 1 :
+            raise ValueError("The number of sample must be greater or egual to 1 !")
+        
         # We check every name of in the sampling dataframe
         for index in self.data_sampling.index :
             type_samp = self.data_sampling.loc[index, "Type"]
             name = self.data_sampling.loc[index, "Name"]
 
-            if type_samp == "elasticity" :
+
+            # Case where the elasticity p is sampled
+            if type_samp.lower() == "elasticity_p" :
                 # If the name is not a list in the case of the elasticity, it's bad
                 if type(name) != list :
-                    print("For the elasticity, be sure to use a list of 2 string, the first for the flux name and the second for the differtial of the elasticity")
-                    Charon = False 
+                    raise TypeError("For the elasticity, be sure to use a list of 2 string, the first for the flux name and the second for the differtial of the elasticity")
+
                 # If the list have more or less than 2 elements, it's not valide
                 elif len(name) != 2 :
-                    print("For the elasticity, be sure to use a list of 2 string, the first for the flux name and the second for the differtial of the elasticity")
-                    Charon = False
+                    raise TypeError("For the elasticity, be sure to use a list of 2 string, the first for the flux name and the second for the differtial of the elasticity")
+
                 else :
                     # We attribute both elements of the list, the first must be the flux name and second the differential name's
                     flux, differential = name
                     # We check if the flux is in the model
                     if flux not in self.elasticity.p.index :
-                        print(f"The flux name \n{flux}\n is nnot in the elasticity matrix")
-                        Charon = False
-                    elif differential not in self.elasticity.p.columns and differential not in self.elasticity.s.columns : 
-                        print(f"The differential name \n{differential}\n is not in the elasticity matrices E_s and E_p")
-                        Charon = False
+                        raise NameError(f"The flux name \n{flux}\n is nnot in the elasticity matrix")
+
+                    elif differential not in self.elasticity.p.columns : 
+                        raise NameError(f"The differential name \n{differential}\n is not in the elasticity matrices E_p")
             
-            elif type_samp == "metabolite" :
-                if name not in self.metabolites.df.index :
-                        print(f"The metabolite name \n{name}\n is not in the metabolites dataframe")
-                        Charon = False
+
+            # Case where the elasticity s is sampled
+            elif type_samp.lower() == "elasticity_s" :
+                # If the name is not a list in the case of the elasticity, it's bad
+                if type(name) != list :
+                    raise TypeError("For the elasticity, be sure to use a list of 2 string, the first for the flux name and the second for the differtial of the elasticity")
+
+                # If the list have more or less than 2 elements, it's not valide
+                elif len(name) != 2 :
+                    raise TypeError("For the elasticity, be sure to use a list of 2 string, the first for the flux name and the second for the differtial of the elasticity")
+
+                else :
+                    # We attribute both elements of the list, the first must be the flux name and second the differential name's
+                    flux, differential = name
+                    # We check if the flux is in the model
+                    if flux not in self.elasticity.s.index :
+                        raise NameError(f"The flux name \n{flux}\n is nnot in the elasticity matrix")
+
+                    elif differential not in self.elasticity.s.columns : 
+                        raise NameError(f"The differential name \n{differential}\n is not in the elasticity matrices E_s")
             
-            elif type_samp == "flux" :
-                if name not in self.reactions.df.index :
-                        print(f"The flux name \n{name}\n is not in the reactions dataframe")
-                        Charon = False
-            
-            elif type_samp == "parameter" :
+
+            # Case where a parameter is sampled
+            elif type_samp.lower() == "parameter" :
                 if name not in self.parameters.df.index :
-                        print(f"The parameter name \n{name}\n is not in the parameters dataframe")
-                        Charon = False
+                        raise NameError(f"The parameter name \n{name}\n is not in the parameters dataframe")
 
-            elif type_samp == "enzyme" :
+
+            # Case where the metabolite concentration is sampled                  
+            elif type_samp.lower() == "metabolite" :
+                if name not in self.metabolites.df.index :
+                        raise NameError(f"The metabolite name \n{name}\n is not in the metabolites dataframe")
+
+
+            # Case where the flux s is sampled
+            elif type_samp.lower() == "flux" :
+                if name not in self.reactions.df.index :
+                        raise NameError(f"The flux name \n{name}\n is not in the reactions dataframe")
+
+
+            # Case where a enzyme concentration/activity is sampled
+            elif type_samp.lower() == "enzyme" :
                 if name not in self.enzymes.df.index :
-                        print(f"The enzyme name \n{name}\n is not in the enzymes dataframe")
-                        Charon = False
-            
+                        raise NameError(f"The enzyme name \n{name}\n is not in the enzymes dataframe")
+
+
             else : 
-                print(f"The type \n{type_samp}\n is not available")
+                raise NameError(f"The type \n{type_samp}\n is not available")
         
-        if Charon == True :
-            1
-            # Lets go 
+
+        # Let's check if the name of the distribution are correct
+        distribution_allowed = ["normal", "beta"]
+        for index in self.data_sampling.index :
+            type_Distribution = self.data_sampling.loc[index, "Distribution"]
+            if type_Distribution.lower() not in distribution_allowed :
+                raise NameError(f"The name of the distribution {type_Distribution} is not handle by the programme !")
+
+        
+        # We keep in memory the initial state of the model because we will directly modify the value of the model.
+        momo = self
+        
+        # We call of a dataframe in order to initialise the variable with the good shape and get the name of the indexs and columns
+        rho_df = self.rho()
+        self.rho_sampled = self.rho()
 
 
 
+    #############################################################################
+    ###################   function to remember a state   ########################
+    def __save_state(self) :
+        # Use of copy.deepcopy because dataframe are mutable = change also there renferencements
+        import copy
 
+        self.__original_atributes = {}
+
+        self.__original_atributes["stoichiometry"]    = copy.deepcopy(self.Stoichio_matrix)
+        self.__original_atributes["metabolites"]      = copy.deepcopy(self.metabolites.df)
+        self.__original_atributes["reactions"]        = copy.deepcopy(self.reactions.df)
+        self.__original_atributes["parameters"]       = copy.deepcopy(self.parameters.df)
+        self.__original_atributes["elasticities_s"]   = copy.deepcopy(self.elasticity.s)
+        self.__original_atributes["elasticities_p"]   = copy.deepcopy(self.elasticity.p)
+        self.__original_atributes["enzymes"]          = copy.deepcopy(self.enzymes.df)
+
+        print(self.__original_atributes["stoichiometry"].loc["D_Glucose", "PTS_RPTSsy"])
+
+        
+
+    #############################################################################
+    ###################   function to remember a state   ########################
+    def __upload_state(self) :
+        self.metabolites.df  =   self.__original_atributes["metabolites"]
+        self.reactions.df    =   self.__original_atributes["reactions"]
+        self.parameters.df   =   self.__original_atributes["parameters"]
+        self.elasticity.s    =   self.__original_atributes["elasticities_s"]
+        self.elasticity.p    =   self.__original_atributes["elasticities_p"]
+        self.enzymes.df      =   self.__original_atributes["enzymes"]
+        self.Stoichio_matrix =   self.__original_atributes["stoichiometry"]
+
+        print(self.__original_atributes["stoichiometry"].loc["D_Glucose", "PTS_RPTSsy"])
+
+
+
+    #############################################################################
+    ###################  test   #########################
+
+    def changement_puis_rest(self) :
+        self.__save_state()
+        #print(len(self.Stoichio_matrix))
+        print("\n \n")
+
+
+        self.Stoichio_matrix.loc["D_Glucose", "PTS_RPTSsy"] = 123.0
+        print(self.__original_atributes["stoichiometry"].loc["D_Glucose", "PTS_RPTSsy"])
+
+        #print(len(self.Stoichio_matrix))
+        print("\n \n")
+
+        self.__upload_state()
+        #print(len(self.Stoichio_matrix))
 
 
     #############################################################################

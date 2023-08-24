@@ -24,15 +24,16 @@ class Metabolite_class:
         # Private list to deal with the fact that a dataframe cannot be filled if there is no collumn in the dataframe
         self.__list_meta = []
 
-        self.df = pd.DataFrame(columns= ['External'])
+        self.df            = pd.DataFrame(columns= ['External'])
         self.concentration = pd.DataFrame(columns= ['Concentration (mmol/gDW)'])
+
     #################################################################################
-    #########           Return the Dataframe of the reactions                         ##########
+    #########           Return the Dataframe of the metabolites            ##########
     def __repr__(self) -> str:
         return str(self.df)
 
     #################################################################################
-    #########        Fonction to return the number of reaction                         ##########
+    #########        Fonction to return the number of metabolites          ##########
     @property
     def len(self) :
         return len(self.df)
