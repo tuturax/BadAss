@@ -9,6 +9,7 @@ import pandas as pd
 
 
 
+
 #####################
 # Class Metabolites
 #####################
@@ -24,8 +25,7 @@ class Metabolite_class:
         # Private list to deal with the fact that a dataframe cannot be filled if there is no collumn in the dataframe
         self.__list_meta = []
 
-        self.df            = pd.DataFrame(columns= ['External'])
-        self.concentration = pd.DataFrame(columns= ['Concentration (mmol/gDW)'])
+        self.df            = pd.DataFrame(columns= ['External', 'Concentration (mmol/gDW)'])
 
     #################################################################################
     #########           Return the Dataframe of the metabolites            ##########
@@ -39,21 +39,21 @@ class Metabolite_class:
         return len(self.df)
 
     #################################################################################
-    #########           Fonction to add a reaction                         ##########
-    def add(self, name = None , external = False) :
+    #########           Fonction to add a metabolite                         ##########
+    def add(self, name = None , external = False, concentration = 1) :
         ### Description of the fonction
         """
         Fonction to add a matabolite to the model
             
-        name         : Name of the metabolite.
+        name          : Name of the metabolite
 
-        External     : Boolean to say if the metabolite is external
+        external      : Boolean to say if the metabolite is external
+        concentration : Concentration of the metabolite
 
         """
         # Look if the metabolite class was well intialised
         if type(self.df) != type(pd.DataFrame()):
-            self.df = pd.DataFrame(columns= [ 'External'])
-            self.concentration = pd.DataFrame(columns= ['Concentration (mmol/gDW)'])
+            self.df = pd.DataFrame(columns= [ 'External', 'Concentration (mmol/gDW)'])
         
         # Look if the metabolite is already in the model
         elif name in self.df.index :
@@ -61,8 +61,7 @@ class Metabolite_class:
 
         # Else, the metabolite is add to the model by an add to the DataFrame
         else :
-            self.df.loc[name] = [external]
-            self.concentration.loc[name] = [0]
+            self.df.loc[name] = [external, concentration]
 
             # If there is no reaction in the columns of the soichio metric matrix, we keep in memeory the metabolite
             if self.__class_model_instance.Stoichio_matrix.columns.size == 0 :
@@ -91,19 +90,17 @@ class Metabolite_class:
         """
         Fonction to remove a metabolite to the model
             
-        name        : Name of the reaction to remove
+        name        : Name of the metabolite to remove
         """
 
-        # Look if the reaction is in the model
+        # Look if the metabolite is in the model
         if name not in self.df.index :
-            raise TypeError("Please enter a valide name \n")
+            raise NameError("Please enter a valide name \n")
 
         else :
 
             # Else, the metabolite is remove from the dataframe
             self.df.drop(name, inplace=True)
-            self.concentration.drop(name, inplace=True)
-
 
             for meta in self.__class_model_instance.Stoichio_matrix.index :
                 # If the the meta is not in the modified metabolite dataframe => it was deleted
@@ -126,22 +123,21 @@ class Metabolite_class:
 
     #################################################################################
     #########           Fonction to update the meta dataframe              ##########
-    def _update(self, name = None , external = False) :
+    def _update(self, name = None , external = False, concentration = 1) :
         ### Description of the fonction
         """
         Internal function to update the metabolite dataframe after a change of the stoichiometric matrix
             
-        name         : Name of the metabolite.
+        name          : Name of the metabolite
 
-        External     : Boolean to say if the metabolite is external
+        external      : Boolean to say if the metabolite is external
+        concentration : Concentration of the metabolite
 
         """
         # Look if the metabolite class was well intialised
         if type(self.df) != type(pd.DataFrame()):
-            self.df = pd.DataFrame(columns= [ 'External'])
-            self.concentration = pd.DataFrame(columns= ['Concentration (mmol/gDW)'])
+            self.df = pd.DataFrame(columns= [ 'External', 'Concentration (mmol/gDW)'])
         
         # Look if the metabolite is already in the model
         if name not in self.df.index :
-            self.df.loc[name] = [external]
-            self.concentration.loc[name] = [0]
+            self.df.loc[name] = [external, concentration]

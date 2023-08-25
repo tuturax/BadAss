@@ -152,7 +152,6 @@ class model:
     
     @property
     def __covariance(self) :
-
         matrix_covariance_dx = np.identity(len(self.__Standard_deviations))
         for i in range(len(matrix_covariance_dx)) :
             matrix_covariance_dx[i][i] = self.__Standard_deviations[i]**2
@@ -165,6 +164,19 @@ class model:
     @property
     def covariance(self) :
         return pd.DataFrame(self.__covariance, index = (self.parameters.df.index.to_list() + self.R.index.to_list()) , columns = ( self.parameters.df.index.to_list() + self.R.index.to_list() ) )
+
+    @property
+    def __MI(self) :
+        I = Cov = self.__covariance
+        for i in range(Cov.shape[0]) :
+            for j in range(Cov.shape[1]) :
+                I[i][j] = (1/(2*np.log(2)))*Cov[i][i]*Cov[j][j]/Cov[i][j]
+        return(I)
+    @property
+    def MI(self) :
+        return pd.DataFrame(self.__MI, index = (self.parameters.df.index.to_list() + self.R.index.to_list()) , columns = ( self.parameters.df.index.to_list() + self.R.index.to_list() ) )
+
+
 
 
     #############################################################################
@@ -263,7 +275,7 @@ class model:
                 for j in range(Cov.shape[1]) :
                     rho[i][j] = (Cov[i][j])/((np.real(Cov[i][i])*np.real(Cov[j][j]))**0.5)
 
-        return pd.DataFrame(rho, index = Cov_df.index , columns = Cov_df.columns)
+        return (pd.DataFrame(rho, index = Cov_df.index , columns = Cov_df.columns), rho)
 
     
         
@@ -448,7 +460,7 @@ class model:
         import matplotlib.pyplot as plt
 
         # Get the rho matrix
-        rho_df = self.rho()
+        rho_df, rho = self.rho()
 
         # Look the index to keep for the plot of the matrix 
         index_to_keep_bis = []
@@ -525,12 +537,12 @@ class model:
         
         # We check every name of in the sampling dataframe
         for index in self.data_sampling.index :
-            type_samp = self.data_sampling.loc[index, "Type"]
+            type_samp = self.data_sampling.loc[index, "Type"].lower()  # .lower() = put the string in lowercase
             name = self.data_sampling.loc[index, "Name"]
 
 
             # Case where the elasticity p is sampled
-            if type_samp.lower() == "elasticity_p" :
+            if type_samp == "elasticity_p" :
                 # If the name is not a list in the case of the elasticity, it's bad
                 if type(name) != list :
                     raise TypeError("For the elasticity, be sure to use a list of 2 string, the first for the flux name and the second for the differtial of the elasticity")
@@ -551,7 +563,7 @@ class model:
             
 
             # Case where the elasticity s is sampled
-            elif type_samp.lower() == "elasticity_s" :
+            elif type_samp == "elasticity_s" :
                 # If the name is not a list in the case of the elasticity, it's bad
                 if type(name) != list :
                     raise TypeError("For the elasticity, be sure to use a list of 2 string, the first for the flux name and the second for the differtial of the elasticity")
@@ -572,25 +584,25 @@ class model:
             
 
             # Case where a parameter is sampled
-            elif type_samp.lower() == "parameter" :
+            elif type_samp == "parameter" :
                 if name not in self.parameters.df.index :
                         raise NameError(f"The parameter name \n{name}\n is not in the parameters dataframe")
 
 
             # Case where the metabolite concentration is sampled                  
-            elif type_samp.lower() == "metabolite" :
+            elif type_samp == "metabolite" :
                 if name not in self.metabolites.df.index :
                         raise NameError(f"The metabolite name \n{name}\n is not in the metabolites dataframe")
 
 
             # Case where the flux s is sampled
-            elif type_samp.lower() == "flux" :
+            elif type_samp == "flux" :
                 if name not in self.reactions.df.index :
                         raise NameError(f"The flux name \n{name}\n is not in the reactions dataframe")
 
 
             # Case where a enzyme concentration/activity is sampled
-            elif type_samp.lower() == "enzyme" :
+            elif type_samp == "enzyme" :
                 if name not in self.enzymes.df.index :
                         raise NameError(f"The enzyme name \n{name}\n is not in the enzymes dataframe")
 
@@ -600,19 +612,80 @@ class model:
         
 
         # Let's check if the name of the distribution are correct
-        distribution_allowed = ["normal", "beta"]
+        distribution_allowed = ["uniform" , "normal", "beta"]
         for index in self.data_sampling.index :
             type_Distribution = self.data_sampling.loc[index, "Distribution"]
             if type_Distribution.lower() not in distribution_allowed :
                 raise NameError(f"The name of the distribution {type_Distribution} is not handle by the programme !")
 
         
-        # We keep in memory the initial state of the model because we will directly modify the value of the model.
-        momo = self
-        
+
+        ## At this state, the datframe of the sampling data is well build
+
+
+        def value_rand(type_samp : str , SD : str , mean : float) :
+            if type_samp.lower() == "uniform" :
+                deviation = (9*SD)**0.25
+                np.random.uniform(mean-deviation , mean + deviation)
+            
+            elif type_samp.lower == "normal" :
+                return np.random.normal(mean, SD)
+            
+            elif type_samp.lower == "beta" :
+                alpha = (( ( 1-mean )/( (np.sqrt(SD))*(2-mean)**2) )-1)/(2-mean)
+                beta  = alpha * (1-mean)
+                return np.random.beta(alpha, beta)
+
+
         # We call of a dataframe in order to initialise the variable with the good shape and get the name of the indexs and columns
-        rho_df = self.rho()
-        self.rho_sampled = self.rho()
+        rho_df , rho_sampled = self.rho()
+
+        # We save the original value of the model
+        self.__save_state()
+
+        for i in  range(N) :
+
+            for index in self.data_sampling.index :
+                type_machin        = self.data_sampling.loc[index, "Type"]
+                type_samp          = self.data_sampling.loc[index, "Distribution"]
+                name               = self.data_sampling.loc[index, "Name"]
+                standard_deviation = self.data_sampling.loc[index, "Standard deviation"]
+
+                if type_machin.lower() == "elasticity_p" :
+                    flux, differential = name
+                    mean = self.__original_atributes["elasticities_p"].loc[flux, differential]
+                    self.elasticity.p.loc[flux, differential] = value_rand(type_samp, standard_deviation, mean)
+
+                elif type_machin.lower() == "elasticity_s" :
+                    flux, differential = name
+                    mean = self.__original_atributes["elasticities_s"].loc[flux, differential]
+                    self.elasticity.s.loc[flux, differential] = value_rand(type_samp, standard_deviation, mean)
+
+                elif type_machin.lower() == "parameter" :
+                    mean = self.__original_atributes["parameters"].loc[name, 'Mean values']
+                    self.parameters.loc[name, 'Mean values'] = value_rand(type_samp, standard_deviation, mean)
+
+                elif type_machin.lower() == "metabolite" :
+                    mean = self.__original_atributes["metabolite"].loc[name, 'Concentration (mmol/gDW)']
+                    self.metabolites.df.loc[name, 'Concentration (mmol/gDW)'] = value_rand(type_samp, standard_deviation, mean)
+                
+                elif type_machin.lower() == "flux" :
+                    mean = self.__original_atributes["reactions"].loc[name, 'Flux (mmol/gDW/h)']
+                    self.metabolites.df.loc[name, 'Flux (mmol/gDW/h)'] = value_rand(type_samp, standard_deviation, mean)
+                
+                elif type_machin.lower() == "enzyme" :
+                    mean = self.__original_atributes["enzymes"].loc[name, 'Concentration / Activity']
+                    self.metabolites.df.loc[name, 'Concentration / Activity'] = value_rand(type_samp, standard_deviation, mean)
+                
+            rho_sampled += self.rho()[1]
+
+        rho_sampled /= (N+1)
+    
+        self.__upload_state()
+        
+        return(rho_sampled)
+
+
 
 
 

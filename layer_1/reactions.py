@@ -9,6 +9,7 @@ import pandas as pd
 
 
 
+
 ####################
 # Class Reactions
 #####################
@@ -18,20 +19,13 @@ class Reaction_class:
     #############             Initialisation                #####################
     def __init__(self, class_model_instance):
 
-        #super().__init__()
-
         # Private attribute for the instance of the Main class
         self.__class_model_instance = class_model_instance
         
 
-        self.df    = pd.DataFrame(columns= ['Metabolites', 'Equilibrium constant', 'Law'])
-        self._flux = pd.DataFrame(columns= ['Concentration (mmol/gDW/h)'])
 
-    #############################################################################
-    ##################              Getter                  #####################
-    @property
-    def flux(self) :
-        return self._flux
+
+        self.df    = pd.DataFrame(columns= ['Metabolites', 'Equilibrium constant', 'Law', 'Flux (mmol/gDW/h)'])
 
     ################################################################################
     #########           Return the Dataframe of the reactions             ##########
@@ -44,12 +38,9 @@ class Reaction_class:
     def len(self) :
         return len(self.df)
 
-
-
     #################################################################################
     #########           Fonction to add a reaction                         ##########
     def add(self, name : str, metabolites = {}, k_eq = 1.0, law ="") -> None :
-
         ### Description of the fonction
         """
         Fonction to add a reaction to the model
@@ -63,8 +54,7 @@ class Reaction_class:
         """
         # Look if the reaction class was well intialised
         if type(self.df) != type(pd.DataFrame()):
-            self.df = pd.DataFrame(columns= ['Metabolites', 'Equilibrium constant', 'Law'])
-            self.flux = pd.DataFrame(columns= ['Concentration (mmol/gDW/h)'])
+            self.df = pd.DataFrame(columns= ['Metabolites', 'Equilibrium constant', 'Law', 'Flux (mmol/gDW/h)'])
 
         # Look if the reaction is already in the model
         if name in self.df.index :
@@ -72,8 +62,7 @@ class Reaction_class:
 
         # Else, the reaction is add to the model by an add to the DataFrame
         else :
-            self.df.loc[name]   = [metabolites, k_eq, law]
-            self.flux.loc[name] = [0]
+            self.df.loc[name]   = [metabolites, k_eq, law, 1]
 
             for reaction in self.df.index :
                 # If the the reaction is not in the orginal Stoichiometry matrix => it was add
@@ -132,7 +121,7 @@ class Reaction_class:
 
     #################################################################################
     #########           Fonction to add a reaction                         ##########
-    def _update(self, name : str, metabolites = {}, k_eq = 1.0, law ="") -> None :
+    def _update(self, name : str, metabolites = {}, k_eq = 1.0, law ="", flux = 1) -> None :
 
         ### Description of the fonction
         """
@@ -147,8 +136,7 @@ class Reaction_class:
         """
         # Look if the reaction class was well intialised
         if type(self.df) != type(pd.DataFrame()):
-            self.df = pd.DataFrame(columns= ['Metabolites', 'Equilibrium constant', 'Law'])
-            self.flux = pd.DataFrame(columns= ['Concentration (mmol/gDW/h)'])
+            self.df = pd.DataFrame(columns= ['Metabolites', 'Equilibrium constant', 'Law', 'Flux (mmol/gDW/h)'])
 
         # Look if the reaction is already in the model
         if name in self.df.index :
@@ -156,8 +144,7 @@ class Reaction_class:
 
         # Else, the reaction is add to the model by an add to the DataFrame
         else :
-            self.df.loc[name] = [metabolites, k_eq, law]
-            self.flux.loc[name] = [0]
+            self.df.loc[name] = [metabolites, k_eq, law, flux]
 
             # We check the stoichiometric coefficient link to this reaction in order to automatically add them to the matrix
             for meta in list(self.df.loc[name, 'Metabolites'].keys()) :
