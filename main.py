@@ -165,17 +165,6 @@ class model:
     def covariance(self) :
         return pd.DataFrame(self.__covariance, index = (self.parameters.df.index.to_list() + self.R.index.to_list()) , columns = ( self.parameters.df.index.to_list() + self.R.index.to_list() ) )
 
-    @property
-    def __MI(self) :
-        I = Cov = self.__covariance
-        for i in range(Cov.shape[0]) :
-            for j in range(Cov.shape[1]) :
-                I[i][j] = (1/(2*np.log(2)))*Cov[i][i]*Cov[j][j]/Cov[i][j]
-        return(I)
-    @property
-    def MI(self) :
-        return pd.DataFrame(self.__MI, index = (self.parameters.df.index.to_list() + self.R.index.to_list()) , columns = ( self.parameters.df.index.to_list() + self.R.index.to_list() ) )
-
 
 
 
@@ -278,7 +267,69 @@ class model:
         return (pd.DataFrame(rho, index = Cov_df.index , columns = Cov_df.columns), rho)
 
     
+    #################################################################################
+    ############    Function that return the Mutual Inforamtion matrix   ############
+    def MI(self, groups = []) :
+        ### Description of the fonction
+        """
+        Fonction to compute the Mutual information
+
+        groups : a list or a dictionnary contenning a list of string of the variables/parameter to regroup
+
+        if groups = [] (by defalut) we take all variables/parameters indivudually
+        """
+        Cov_df = self.covariance
+        Cov = Cov_df.to_numpy()
+
+        # If the groups variables is empty, we return the mutual information of every single variables and parameters
+        if groups == [] :
+            MI = np.zeros(Cov.shape)
+
+            for i in range(Cov.shape[0]) :
+                for j in range(Cov.shape[1]) :
+                    MI[i][j] = (1/(2*np.log(2))) * np.log( Cov[i][i]*Cov[j][j] / (Cov[i][i]*Cov[j][j] - Cov[i][j]*Cov[j][i]))
+
+            return(pd.DataFrame(MI, index = Cov_df.index , columns = Cov_df.columns ))
         
+
+        # Else it mean that we study a group of variable
+        elif type(groups) == list :
+            dictionnary = {}
+            for i, group in enumerate(groups) :
+                dictionnary[str(i)] = group
+        
+        elif type(groups) == dictionnary :
+            dictionnary = groups
+
+
+
+        # First we make sure that every variables in the list of list is well in the covarience matrix
+        for key in dictionnary.keys() :
+            group = dictionnary[key]
+            for variable in group :
+                if variable not in Cov_df.index :
+                    raise NameError(f"The variables {variable} is not in the covariance matrix !")
+                
+        # Initialisation of the MI matrix
+        MI = pd.DataFrame( index = dictionnary.keys(), columns=dictionnary.keys() , dtype=float)
+
+        for key1 in dictionnary.keys() :
+            for key2 in dictionnary.keys() :
+                # extraction of the list of string
+                group1  = dictionnary[key1]
+                group2  = dictionnary[key2]
+
+                Cov_1 = Cov_df.loc[group1, group1].to_numpy()
+                Cov_2 = Cov_df.loc[group2, group2].to_numpy()
+                Cov_3 = Cov_df.loc[group1 + group2, group1 + group2].to_numpy()
+
+                MI.loc[key1, key2] = (1/(2*np.log(2)))*np.log(np.linalg.det(Cov_1)*np.linalg.det(Cov_2)/np.linalg.det(Cov_3))
+        
+        return(MI)
+
+                        
+
+
     #############################################################################
     ###############  Function to creat a simple linear network ##################
     def creat_linear(self, n : int) :
@@ -461,6 +512,82 @@ class model:
 
         # Get the rho matrix
         rho_df, rho = self.rho()
+
+        # Look the index to keep for the plot of the matrix 
+        index_to_keep_bis = []
+        # If nothing is specified, we keep everything
+        #else
+        if len(index_to_keep) != 0 :
+            # We take a look at every index that the user enter
+            for index in index_to_keep :
+                # If one of them is not in the model, we told him
+                if index not in rho_df.index :
+                    print(f"- {index} is not in the correlation matrix")
+                # else, we keep in memory the index that are in the model
+                else :
+                    index_to_keep_bis.append(index)
+
+        else :
+            index_to_keep_bis = rho_df.index
+
+        # Then we create a new matrix with only the index specified
+        rho_df = rho_df.loc[index_to_keep_bis, index_to_keep_bis]
+        rho = rho_df.to_numpy()
+
+
+        fig, ax = plt.subplots()
+        custom_map = matplotlib.colors.LinearSegmentedColormap.from_list( "custom", ["red", "white", "blue"])
+
+        im = plt.imshow(rho, cmap=custom_map, vmin= -1, vmax= 1 )
+
+        # Display the label next to the axis
+        if label == True :
+            ax.set_xticks(np.arange(len(rho_df.index)), labels=rho_df.index)
+            ax.set_yticks(np.arange(len(rho_df.index)), labels=rho_df.index)
+
+            plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
+                rotation_mode="anchor")
+
+        # Display the value of each cell 
+        if value_in_cell == True :
+            for i in range(rho.shape[0]):
+                for j in range(rho.shape[1]):
+                    text = ax.text(j, i, round(rho[i, j],2),
+                            ha="center", va="center", color="black")
+
+        # Title of the plot
+        ax.set_title(title)
+        fig.tight_layout()
+
+        # Plot of the black line to separate the parameters from the variables
+        # Width of the line
+        line_width = 1
+        # Number of parameters
+        N_para = self.parameters.df.shape[0]
+        # Position of the line
+        x_p_e = [-0.5, N_para -.5]
+        y_p_e = [N_para -.5, N_para -.5]
+        plt.plot(x_p_e,y_p_e, 'black', linewidth=line_width)
+        plt.plot(y_p_e,x_p_e, 'black', linewidth=line_width)
+
+        x_p = [-0.5, N_para -.5]
+        y_p = [N_para -.5, N_para -.5]
+        plt.plot(x_p,y_p, 'black', linewidth=line_width)
+        plt.plot(y_p,x_p, 'black', linewidth=line_width)
+
+        plt.colorbar()
+        plt.show()
+
+    #############################################################################
+    ###################   Function plot the MI matrix   #########################
+    def plot_MI(self,title = "Mutual Inforamtion", label = True, value_in_cell = True, index_to_keep = []) :
+        import matplotlib
+        import matplotlib.pyplot as plt
+
+        # Get the rho matrix
+        MI_df = self.MI
+        MI = self.__MI
+
 
         # Look the index to keep for the plot of the matrix 
         index_to_keep_bis = []
