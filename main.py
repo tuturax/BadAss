@@ -504,91 +504,18 @@ class model:
 
         return(unused_reactions, unused_metabolites)
 
-    #############################################################################
-    ###################   Function plot the rho matrix   #########################
-    def plot_rho(self,title = "Correlation", label = True, value_in_cell = True, index_to_keep = []) :
-        import matplotlib
-        import matplotlib.pyplot as plt
-
-        # Get the rho matrix
-        rho_df = self.rho()
-        rho = rho_df.to_numpy()
-
-        # Look the index to keep for the plot of the matrix 
-        index_to_keep_bis = []
-        # If nothing is specified, we keep everything
-        #else
-        if len(index_to_keep) != 0 :
-            # We take a look at every index that the user enter
-            for index in index_to_keep :
-                # If one of them is not in the model, we told him
-                if index not in rho_df.index :
-                    raise IndexError(f"- {index} is not in the correlation matrix")
-                # else, we keep in memory the index that are in the model
-                else :
-                    index_to_keep_bis.append(index)
-
-        else :
-            index_to_keep_bis = rho_df.index
-
-        # Then we create a new matrix with only the index specified
-        rho_df = rho_df.loc[index_to_keep_bis, index_to_keep_bis]
-        rho = rho_df.to_numpy()
-
-
-        fig, ax = plt.subplots()
-        custom_map = matplotlib.colors.LinearSegmentedColormap.from_list( "custom", ["red", "white", "blue"])
-
-        im = plt.imshow(rho, cmap=custom_map, vmin= -1, vmax= 1 )
-
-        # Display the label next to the axis
-        if label == True :
-            ax.set_xticks(np.arange(len(rho_df.index)), labels=rho_df.index)
-            ax.set_yticks(np.arange(len(rho_df.index)), labels=rho_df.index)
-
-            plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
-                rotation_mode="anchor")
-
-        # Display the value of each cell 
-        if value_in_cell == True :
-            for i in range(rho.shape[0]):
-                for j in range(rho.shape[1]):
-                    text = ax.text(j, i, round(rho[i, j],2),
-                            ha="center", va="center", color="black")
-
-        # Title of the plot
-        ax.set_title(title)
-        fig.tight_layout()
-
-        # Plot of the black line to separate the parameters from the variables
-        # Width of the line
-        line_width = 1
-        # Number of parameters
-        N_para = self.parameters.df.shape[0]
-        # Position of the line
-        x_p_e = [-0.5, N_para -.5]
-        y_p_e = [N_para -.5, N_para -.5]
-        plt.plot(x_p_e,y_p_e, 'black', linewidth=line_width)
-        plt.plot(y_p_e,x_p_e, 'black', linewidth=line_width)
-
-        x_p = [-0.5, N_para -.5]
-        y_p = [N_para -.5, N_para -.5]
-        plt.plot(x_p,y_p, 'black', linewidth=line_width)
-        plt.plot(y_p,x_p, 'black', linewidth=line_width)
-
-        plt.colorbar()
-        plt.show()
 
     #############################################################################
     ###################   Function plot the MI matrix   #########################
-    def plot_MI(self,title = "Mutual Inforamtion", label = True, value_in_cell = True, index_to_keep = []) :
+    def plot(self, result = "MI", title = "", label = True, value_in_cell = True, index_to_keep = []) :
         import matplotlib
         import matplotlib.pyplot as plt
 
         # Get the rho matrix
-        MI_df = self.MI()
-        MI = MI_df.to_numpy()
-
+        if result == "MI" :
+            data_frame = self.MI()
+        else : 
+            data_frame = self.rho()
 
         # Look the index to keep for the plot of the matrix 
         index_to_keep_bis = []
@@ -598,40 +525,51 @@ class model:
             # We take a look at every index that the user enter
             for index in index_to_keep :
                 # If one of them is not in the model, we told him
-                if index not in rho_df.index :
+                if index not in data_frame.index :
                     raise IndexError(f"- {index} is not in the correlation matrix")
                 # else, we keep in memory the index that are in the model
                 else :
                     index_to_keep_bis.append(index)
 
         else :
-            index_to_keep_bis = rho_df.index
+            index_to_keep_bis = data_frame.index
 
         # Then we create a new matrix with only the index specified
-        rho_df = rho_df.loc[index_to_keep_bis, index_to_keep_bis]
-        rho = rho_df.to_numpy()
+        data_frame = data_frame.loc[index_to_keep_bis, index_to_keep_bis]
+        matrix = data_frame.to_numpy()
 
 
         fig, ax = plt.subplots()
-        custom_map = matplotlib.colors.LinearSegmentedColormap.from_list( "custom", ["red", "white", "blue"])
 
-        im = plt.imshow(rho, cmap=custom_map, vmin= -1, vmax= 1 )
+        if result.lower() == "mi" :
+            custom_map = matplotlib.colors.LinearSegmentedColormap.from_list( "custom", ["white", "blue"])
+            im = plt.imshow(matrix, cmap=custom_map, vmin= 0, vmax= np.max(matrix) )
+
+        elif result.lower() == "rho" :
+            custom_map = matplotlib.colors.LinearSegmentedColormap.from_list( "custom", ["red", "white", "blue"])
+            im = plt.imshow(matrix, cmap=custom_map, vmin= -1, vmax= 1 )
 
         # Display the label next to the axis
         if label == True :
-            ax.set_xticks(np.arange(len(rho_df.index)), labels=rho_df.index)
-            ax.set_yticks(np.arange(len(rho_df.index)), labels=rho_df.index)
+            ax.set_xticks(np.arange(len(data_frame.index)), labels=data_frame.index)
+            ax.set_yticks(np.arange(len(data_frame.index)), labels=data_frame.index)
 
             plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
                 rotation_mode="anchor")
 
         # Display the value of each cell 
         if value_in_cell == True :
-            for i in range(rho.shape[0]):
-                for j in range(rho.shape[1]):
-                    text = ax.text(j, i, round(rho[i, j],2),
+            for i in range(matrix.shape[0]):
+                for j in range(matrix.shape[1]):
+                    text = ax.text(j, i, round(matrix[i, j] , 2),
                             ha="center", va="center", color="black")
 
+        if title == "" :
+            if result.lower() == "mi" :
+                title = "Mutual information"
+            elif result.lower() == "rho" :
+                title = "Correlation"
+    
         # Title of the plot
         ax.set_title(title)
         fig.tight_layout()
@@ -753,10 +691,10 @@ class model:
                 deviation = (9*SD)**0.25
                 return np.random.uniform(mean-deviation , mean + deviation)
             
-            elif type_samp.lower == "normal" :
+            elif type_samp.lower() == "normal" :
                 return np.random.normal(mean, SD)
             
-            elif type_samp.lower == "beta" :
+            elif type_samp.lower() == "beta" :
                 alpha = (( ( 1-mean )/( (np.sqrt(SD))*(2-mean)**2) )-1)/(2-mean)
                 beta  = alpha * (1-mean)
                 return np.random.beta(alpha, beta)
