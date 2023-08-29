@@ -92,11 +92,12 @@ class Parameter_class():
                 # We add it in the parameter
                 self.add(enzyme+"_para", mean = self.__class_model_instance.enzymes.df.loc[enzyme, 'Concentration / Activity'])
                 # We add a new column of 0 to the parameters elasticity dataframe
-                self.__class_model_instance.elasticity.p[enzyme+"_para"] = [0 for i in range(self.__class_model_instance.elasticity.p.shape[0])]
+                self.__class_model_instance.elasticity.p[enzyme+"_para"] = [0.0 for i in range(self.__class_model_instance.elasticity.p.shape[0])]
+                
                 # We add 1 to the enzyme linked to reaction
                 for reaction in self.__class_model_instance.enzymes.df.loc[enzyme, 'Reactions linked'] :
-                    self.__class_model_instance.elasticity.p.loc[reaction, enzyme+"_para"] = 1
-        
+                    self.__class_model_instance.elasticity.p.loc[reaction, enzyme+"_para"] = 1.0
+
 
     ##################################################################################
     #########         Fonction to add all external metabolite               ##########

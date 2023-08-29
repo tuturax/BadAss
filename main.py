@@ -264,7 +264,7 @@ class model:
                 for j in range(Cov.shape[1]) :
                     rho[i][j] = (Cov[i][j])/((np.real(Cov[i][i])*np.real(Cov[j][j]))**0.5)
 
-        return (pd.DataFrame(rho, index = Cov_df.index , columns = Cov_df.columns), rho)
+        return (pd.DataFrame(rho, index = Cov_df.index , columns = Cov_df.columns))
 
     
     #################################################################################
@@ -424,7 +424,7 @@ class model:
         
         n_error = document.getNumErrors()
         if n_error != 0 :
-            print(f"There is {n_error} in your SBML file, please fix it before to use this function")
+            raise ValueError(f"There is {n_error} in your SBML file, please fix it before to use this function")
         
         else :
             print(f"0 error detected in your SBML file")
@@ -511,7 +511,8 @@ class model:
         import matplotlib.pyplot as plt
 
         # Get the rho matrix
-        rho_df, rho = self.rho()
+        rho_df = self.rho()
+        rho = rho_df.to_numpy()
 
         # Look the index to keep for the plot of the matrix 
         index_to_keep_bis = []
@@ -522,7 +523,7 @@ class model:
             for index in index_to_keep :
                 # If one of them is not in the model, we told him
                 if index not in rho_df.index :
-                    print(f"- {index} is not in the correlation matrix")
+                    raise IndexError(f"- {index} is not in the correlation matrix")
                 # else, we keep in memory the index that are in the model
                 else :
                     index_to_keep_bis.append(index)
@@ -585,8 +586,8 @@ class model:
         import matplotlib.pyplot as plt
 
         # Get the rho matrix
-        MI_df = self.MI
-        MI = self.__MI
+        MI_df = self.MI()
+        MI = MI_df.to_numpy()
 
 
         # Look the index to keep for the plot of the matrix 
@@ -598,7 +599,7 @@ class model:
             for index in index_to_keep :
                 # If one of them is not in the model, we told him
                 if index not in rho_df.index :
-                    print(f"- {index} is not in the correlation matrix")
+                    raise IndexError(f"- {index} is not in the correlation matrix")
                 # else, we keep in memory the index that are in the model
                 else :
                     index_to_keep_bis.append(index)
@@ -656,8 +657,7 @@ class model:
 
     #############################################################################
     ###################   Function sampled the model    #########################
-    def sampling(self, N : int) :
-
+    def sampling(self, N : int, result = "MI") :
         # If the number of sample asked if < 1 = bad
         if N < 1 :
             raise ValueError("The number of sample must be greater or egual to 1 !")
@@ -709,7 +709,7 @@ class model:
                     elif differential not in self.elasticity.s.columns : 
                         raise NameError(f"The differential name \n{differential}\n is not in the elasticity matrices E_s")
             
-
+                
             # Case where a parameter is sampled
             elif type_samp == "parameter" :
                 if name not in self.parameters.df.index :
@@ -737,7 +737,6 @@ class model:
             else : 
                 raise NameError(f"The type \n{type_samp}\n is not available")
         
-
         # Let's check if the name of the distribution are correct
         distribution_allowed = ["uniform" , "normal", "beta"]
         for index in self.data_sampling.index :
@@ -745,15 +744,14 @@ class model:
             if type_Distribution.lower() not in distribution_allowed :
                 raise NameError(f"The name of the distribution {type_Distribution} is not handle by the programme !")
 
-        
 
         ## At this state, the datframe of the sampling data is well build
 
 
-        def value_rand(type_samp : str , SD : str , mean : float) :
+        def value_rand(type_samp :str , SD : float , mean : float) :
             if type_samp.lower() == "uniform" :
                 deviation = (9*SD)**0.25
-                np.random.uniform(mean-deviation , mean + deviation)
+                return np.random.uniform(mean-deviation , mean + deviation)
             
             elif type_samp.lower == "normal" :
                 return np.random.normal(mean, SD)
@@ -762,56 +760,65 @@ class model:
                 alpha = (( ( 1-mean )/( (np.sqrt(SD))*(2-mean)**2) )-1)/(2-mean)
                 beta  = alpha * (1-mean)
                 return np.random.beta(alpha, beta)
+            
 
 
         # We call of a dataframe in order to initialise the variable with the good shape and get the name of the indexs and columns
-        rho_df , rho_sampled = self.rho()
+        if result == "MI" :
+            data_frame = self.MI()
+        else : 
+            data_frame = self.rho()
+
+        matrix_sampled = data_frame.to_numpy()
 
         # We save the original value of the model
         self.__save_state()
-
+    
         for i in  range(N) :
 
             for index in self.data_sampling.index :
-                type_machin        = self.data_sampling.loc[index, "Type"]
-                type_samp          = self.data_sampling.loc[index, "Distribution"]
                 name               = self.data_sampling.loc[index, "Name"]
+                type_variable      = self.data_sampling.loc[index, "Type"]
                 standard_deviation = self.data_sampling.loc[index, "Standard deviation"]
+                type_samp          = self.data_sampling.loc[index, "Distribution"]
 
-                if type_machin.lower() == "elasticity_p" :
+                if type_variable.lower() == "elasticity_p" :
                     flux, differential = name
                     mean = self.__original_atributes["elasticities_p"].loc[flux, differential]
                     self.elasticity.p.loc[flux, differential] = value_rand(type_samp, standard_deviation, mean)
 
-                elif type_machin.lower() == "elasticity_s" :
+                elif type_variable.lower() == "elasticity_s" :
                     flux, differential = name
                     mean = self.__original_atributes["elasticities_s"].loc[flux, differential]
                     self.elasticity.s.loc[flux, differential] = value_rand(type_samp, standard_deviation, mean)
 
-                elif type_machin.lower() == "parameter" :
+                elif type_variable.lower() == "parameter" :
                     mean = self.__original_atributes["parameters"].loc[name, 'Mean values']
                     self.parameters.loc[name, 'Mean values'] = value_rand(type_samp, standard_deviation, mean)
 
-                elif type_machin.lower() == "metabolite" :
+                elif type_variable.lower() == "metabolite" :
                     mean = self.__original_atributes["metabolite"].loc[name, 'Concentration (mmol/gDW)']
                     self.metabolites.df.loc[name, 'Concentration (mmol/gDW)'] = value_rand(type_samp, standard_deviation, mean)
                 
-                elif type_machin.lower() == "flux" :
+                elif type_variable.lower() == "flux" :
                     mean = self.__original_atributes["reactions"].loc[name, 'Flux (mmol/gDW/h)']
                     self.metabolites.df.loc[name, 'Flux (mmol/gDW/h)'] = value_rand(type_samp, standard_deviation, mean)
                 
-                elif type_machin.lower() == "enzyme" :
+                elif type_variable.lower() == "enzyme" :
                     mean = self.__original_atributes["enzymes"].loc[name, 'Concentration / Activity']
                     self.metabolites.df.loc[name, 'Concentration / Activity'] = value_rand(type_samp, standard_deviation, mean)
-                
-            rho_sampled += self.rho()[1]
+            
+            if result == "MI" :
+                matrix_sampled += self.MI().to_numpy()
+            else : 
+                matrix_sampled += self.rho().to_numpy()
 
-        rho_sampled /= (N+1)
+
+        matrix_sampled /= (N+1)
     
         self.__upload_state()
         
-        return(rho_sampled)
-
+        return(matrix_sampled)
 
 
 
@@ -831,9 +838,6 @@ class model:
         self.__original_atributes["elasticities_s"]   = copy.deepcopy(self.elasticity.s)
         self.__original_atributes["elasticities_p"]   = copy.deepcopy(self.elasticity.p)
         self.__original_atributes["enzymes"]          = copy.deepcopy(self.enzymes.df)
-
-        print(self.__original_atributes["stoichiometry"].loc["D_Glucose", "PTS_RPTSsy"])
-
         
 
     #############################################################################
@@ -847,27 +851,6 @@ class model:
         self.enzymes.df      =   self.__original_atributes["enzymes"]
         self.Stoichio_matrix =   self.__original_atributes["stoichiometry"]
 
-        print(self.__original_atributes["stoichiometry"].loc["D_Glucose", "PTS_RPTSsy"])
-
-
-
-    #############################################################################
-    ###################  test   #########################
-
-    def changement_puis_rest(self) :
-        self.__save_state()
-        #print(len(self.Stoichio_matrix))
-        print("\n \n")
-
-
-        self.Stoichio_matrix.loc["D_Glucose", "PTS_RPTSsy"] = 123.0
-        print(self.__original_atributes["stoichiometry"].loc["D_Glucose", "PTS_RPTSsy"])
-
-        #print(len(self.Stoichio_matrix))
-        print("\n \n")
-
-        self.__upload_state()
-        #print(len(self.Stoichio_matrix))
 
 
     #############################################################################
