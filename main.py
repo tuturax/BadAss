@@ -278,6 +278,9 @@ class model:
 
         if groups = [] (by defalut) we take all variables/parameters indivudually
         """
+        # Line to deal with the 1/0 
+        np.seterr(divide='ignore', invalid='ignore')
+
         Cov_df = self.covariance
         Cov = Cov_df.to_numpy()
 
@@ -325,6 +328,11 @@ class model:
 
                 MI.loc[key1, key2] = (1/(2*np.log(2)))*np.log(np.linalg.det(Cov_1)*np.linalg.det(Cov_2)/np.linalg.det(Cov_3))
         
+
+
+        # Line to retablish the warning
+        np.seterr(divide='warn', invalid='warn')
+
         return(MI)
 
                         
@@ -595,7 +603,7 @@ class model:
 
     #############################################################################
     ###################   Function sampled the model    #########################
-    def sampling(self, N : int, result = "MI") :
+    def sampling(self, N : int, result = "MI", seed_constant = 1) :
         # If the number of sample asked if < 1 = bad
         if N < 1 :
             raise ValueError("The number of sample must be greater or egual to 1 !")
@@ -711,10 +719,29 @@ class model:
 
         # We save the original value of the model
         self.__save_state()
-    
-        for i in  range(N) :
+
+        # Conditional line to deal with the seed of the random values generator
+        # If seed_constant is an int, than we use this int as seed to generate the seed of other random value
+        if type(seed_constant) == int :
+            np.random.seed(seed_constant)
+            seed = np.random.randint(0,2**32,N)
+        else :
+            # Else it is tottaly random
+            seed = np.random.randint(0,2**32,N)
+
+        for i in range(N) :
+            
+            # Seed of the generation of random value
+            np.random.seed(seed[i])
+            seed_2 = np.random.randint(low = 0, high = 2**32, size = self.data_sampling.shape[0])
+            compteur = 0
 
             for index in self.data_sampling.index :
+
+                # Change of the seed of the radom value generator
+                np.random.seed(seed_2[compteur])
+                compteur += 1
+
                 name               = self.data_sampling.loc[index, "Name"]
                 type_variable      = self.data_sampling.loc[index, "Type"]
                 standard_deviation = self.data_sampling.loc[index, "Standard deviation"]
