@@ -25,7 +25,7 @@ class Metabolite_class:
         # Private list to deal with the fact that a dataframe cannot be filled if there is no collumn in the dataframe
         self.__list_meta = []
 
-        self.df            = pd.DataFrame(columns= ['External', 'Concentration (mmol/gDW)'])
+        self.df = pd.DataFrame(columns= ['External', 'Concentration (mmol/gDW)'])
 
     #################################################################################
     #########           Return the Dataframe of the metabolites            ##########
@@ -68,7 +68,7 @@ class Metabolite_class:
                 self.__list_meta.append(name) 
                 print("Don't worry, the metabolite will be add after the add of the 1st reaction")
 
-            # Else, we add every metabolite that we keeped into memory to the stoichiiometrix matrix
+            # Else, we add every metabolite that we keeped into memory to the stoichiometrix matrix
             else : 
                 self.__list_meta.append(name)
                 for meta in self.__list_meta :
@@ -77,7 +77,8 @@ class Metabolite_class:
                 self.__list_meta = []
 
             # Updating the network
-            self.__class_model_instance._update_network(session = "meta")
+            #self.__class_model_instance._update_network(session = "meta")
+            self.__class_model_instance._update_elasticity()
 
 
         

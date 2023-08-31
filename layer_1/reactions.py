@@ -81,7 +81,8 @@ class Reaction_class:
 
 
             # Updating the network
-            self.__class_model_instance._update_network
+            #self.__class_model_instance._update_network(session="reaction")
+            self.__class_model_instance._update_elasticity()
 
 
     #################################################################################
@@ -140,7 +141,8 @@ class Reaction_class:
 
         # Look if the reaction is already in the model
         if name in self.df.index :
-            raise TypeError("The reaction \""+ name +"\" is already in the model !")
+            True
+            #raise NameError("The reaction \""+ name +"\" is already in the model !")
 
         # Else, the reaction is add to the model by an add to the DataFrame
         else :

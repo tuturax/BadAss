@@ -9,6 +9,7 @@ from layer_1.metabolites  import Metabolite_class
 from layer_1.parameters   import Parameter_class
 from layer_1.elasticities import Elasticity_class
 from layer_1.enzymes      import Enzymes_class
+from layer_1.regulation   import Regulation_class
             
 #####################
 # Class model
@@ -27,15 +28,17 @@ class model:
     def __init__(self):
 
         # Call of reaction Class
-        self.__reactions   = Reaction_class(self)
+        self.__reactions    = Reaction_class(self)
         # Call of metabolite Class
-        self.__metabolites = Metabolite_class(self)
+        self.__metabolites  = Metabolite_class(self)
         # Call of elasticity Class
         self.__elasticities = Elasticity_class(self)
         # Call of parameter Class
-        self.__parameters  = Parameter_class(self)
+        self.__parameters   = Parameter_class(self)
         # Call of enzyme Class
-        self.__enzymes  = Enzymes_class(self)
+        self.__enzymes      = Enzymes_class(self)
+        # Call of regulation Class
+        self.__regulations   = Regulation_class(self)
 
 
 
@@ -82,6 +85,10 @@ class model:
     @property
     def parameters(self) :
         return self.__parameters
+    
+    @property
+    def regulations(self) :
+        return self.__regulations
 
     @property
     def elasticity(self) :
@@ -106,7 +113,6 @@ class model:
     @property
     def Jacobian_reversed(self) :
         return pd.DataFrame(self.__Jacobian_reversed, index=self.Jacobian.columns, columns=self.Jacobian.index)
-
 
     @property
     def __R_s_p(self) :
@@ -182,11 +188,11 @@ class model:
     def _update_network(self, session = "Matrix") -> None :
         ### Description of the fonction
         """
-        Fonction to update the dataframes after attibuated a new values to the stoichiomatrix
+        Fonction to update the dataframes after atribuated a new values to the stoichiomatrix
         """
         
         if session == "Matrix" :
-            # Put the dataframee to 0
+            # Put the dataframe to 0
             self.metabolites.df.drop(self.metabolites.df.index, inplace=True)
             self.reactions.df.drop(self.reactions.df.index, inplace=True)
 
@@ -210,12 +216,12 @@ class model:
             self.metabolites._update(meta)
 
         # We update the elasticities matrix based on the new stoichiometric matrix
-        self._update_elasticity
+        self._update_elasticity()
 
 
     #################################################################################
     ############     Function to the elaticities matrix of the model     ############
-    @property
+
     def _update_elasticity(self) :
         ### Description of the fonction
         """
@@ -231,16 +237,16 @@ class model:
 
         # Pandas doesn't allow to add line before at least 1 column is add
         # So we don't add the reaction part until then
-        if self.elasticity.s.columns.size != 0 :
-            for reaction in self.Stoichio_matrix.columns :
-                if reaction not in self.elasticity.s.index :
-                    self.elasticity.s.loc[reaction] = [0 for i in self.elasticity.s.columns]
-        
+        #if self.elasticity.s.columns.size != 0 :
+        for reaction in self.Stoichio_matrix.columns :
+            if reaction not in self.elasticity.s.index :
+                self.elasticity.s.loc[reaction] = [0 for i in self.elasticity.s.columns]
+    
         for reaction in self.Stoichio_matrix.columns :
             if reaction not in self.elasticity.p.index :
                 self.elasticity.p.loc[reaction] = [0 for i in self.elasticity.p.columns]
 
-    
+
 
     #################################################################################
     ############     Function that return the correlation coefficient    ############
@@ -742,36 +748,36 @@ class model:
                 np.random.seed(seed_2[compteur])
                 compteur += 1
 
-                name               = self.data_sampling.loc[index, "Name"]
-                type_variable      = self.data_sampling.loc[index, "Type"]
-                standard_deviation = self.data_sampling.loc[index, "Standard deviation"]
-                type_samp          = self.data_sampling.loc[index, "Distribution"]
+                name               = self.data_sampling.at[index, "Name"]
+                type_variable      = self.data_sampling.at[index, "Type"]
+                standard_deviation = self.data_sampling.at[index, "Standard deviation"]
+                type_samp          = self.data_sampling.at[index, "Distribution"]
 
                 if type_variable.lower() == "elasticity_p" :
                     flux, differential = name
-                    mean = self.__original_atributes["elasticities_p"].loc[flux, differential]
-                    self.elasticity.p.loc[flux, differential] = value_rand(type_samp, standard_deviation, mean)
+                    mean = self.__original_atributes["elasticities_p"].at[flux, differential]
+                    self.elasticity.p.at[flux, differential] = value_rand(type_samp, standard_deviation, mean)
 
                 elif type_variable.lower() == "elasticity_s" :
                     flux, differential = name
-                    mean = self.__original_atributes["elasticities_s"].loc[flux, differential]
+                    mean = self.__original_atributes["elasticities_s"].at[flux, differential]
                     self.elasticity.s.loc[flux, differential] = value_rand(type_samp, standard_deviation, mean)
 
                 elif type_variable.lower() == "parameter" :
-                    mean = self.__original_atributes["parameters"].loc[name, 'Mean values']
-                    self.parameters.loc[name, 'Mean values'] = value_rand(type_samp, standard_deviation, mean)
+                    mean = self.__original_atributes["parameters"].at[name, 'Mean values']
+                    self.parameters.df.at[name, 'Mean values'] = value_rand(type_samp, standard_deviation, mean)
 
                 elif type_variable.lower() == "metabolite" :
-                    mean = self.__original_atributes["metabolite"].loc[name, 'Concentration (mmol/gDW)']
-                    self.metabolites.df.loc[name, 'Concentration (mmol/gDW)'] = value_rand(type_samp, standard_deviation, mean)
+                    mean = self.__original_atributes["metabolite"].at[name, 'Concentration (mmol/gDW)']
+                    self.metabolites.df.at[name, 'Concentration (mmol/gDW)'] = value_rand(type_samp, standard_deviation, mean)
                 
                 elif type_variable.lower() == "flux" :
-                    mean = self.__original_atributes["reactions"].loc[name, 'Flux (mmol/gDW/h)']
-                    self.metabolites.df.loc[name, 'Flux (mmol/gDW/h)'] = value_rand(type_samp, standard_deviation, mean)
+                    mean = self.__original_atributes["reactions"].at[name, 'Flux (mmol/gDW/h)']
+                    self.metabolites.df.at[name, 'Flux (mmol/gDW/h)'] = value_rand(type_samp, standard_deviation, mean)
                 
                 elif type_variable.lower() == "enzyme" :
-                    mean = self.__original_atributes["enzymes"].loc[name, 'Concentration / Activity']
-                    self.metabolites.df.loc[name, 'Concentration / Activity'] = value_rand(type_samp, standard_deviation, mean)
+                    mean = self.__original_atributes["enzymes"].at[name, 'Concentration / Activity']
+                    self.metabolites.df.at[name, 'Concentration / Activity'] = value_rand(type_samp, standard_deviation, mean)
             
             if result == "MI" :
                 matrix_sampled += self.MI().to_numpy()
@@ -789,7 +795,7 @@ class model:
 
 
     #############################################################################
-    ###################   function to remember a state   ########################
+    ###################   function to save a state   ########################
     def __save_state(self) :
         # Use of copy.deepcopy because dataframe are mutable = change also there renferencements
         import copy
@@ -806,7 +812,7 @@ class model:
         
 
     #############################################################################
-    ###################   function to remember a state   ########################
+    ################   function to upload the saved state   #####################
     def __upload_state(self) :
         self.metabolites.df  =   self.__original_atributes["metabolites"]
         self.reactions.df    =   self.__original_atributes["reactions"]
