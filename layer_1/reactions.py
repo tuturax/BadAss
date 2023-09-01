@@ -40,7 +40,7 @@ class Reaction_class:
 
     #################################################################################
     #########           Fonction to add a reaction                         ##########
-    def add(self, name : str, metabolites = {}, k_eq = 1.0, law ="") -> None :
+    def add(self, name : str, metabolites = {}, k_eq = 1.0, law ="", flux = 1.0) -> None :
         ### Description of the fonction
         """
         Fonction to add a reaction to the model
@@ -50,6 +50,7 @@ class Reaction_class:
         
         k_eq        : Equilibre constant of the reaction
         law         : Reaction law
+        flux        : Flux of the reaction at the reference state
 
         """
         # Look if the reaction class was well intialised
@@ -62,7 +63,7 @@ class Reaction_class:
 
         # Else, the reaction is add to the model by an add to the DataFrame
         else :
-            self.df.loc[name]   = [metabolites, k_eq, law, 1]
+            self.df.loc[name]   = [metabolites, k_eq, law, flux]
 
             for reaction in self.df.index :
                 # If the the reaction is not in the orginal Stoichiometry matrix => it was add
@@ -103,7 +104,6 @@ class Reaction_class:
         # Else, the reaction is remove from the model
         else :
             self.df.drop(name, inplace=True)
-            self.flux.drop(name, inplace=True)
 
             # For a reaction in the stoichiometric matrix
             for reaction in self.__class_model_instance.Stoichio_matrix.columns :

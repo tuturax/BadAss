@@ -46,15 +46,11 @@ class model:
         # Initialisation of the Matrix_Stoechio attribute
         self._Stoichio_matrix = pd.DataFrame()
 
-        self._enzyme = pd.DataFrame(columns=["Reactions", "Value"])
-        
-        # Initialisation of the dynamic attributes
-        self._Jacobien_reversed = np.array([])
-
         # Sampling file of the model
         self.data_sampling = pd.DataFrame(columns=["Name","Type", "Standard deviation", "Distribution"])
 
         print("Model created \n \nTo add metabolite, use .metabolites.add_meta \nTo add reaction,   use .reactions.add_reaction")
+    
     #################################################################################
     ######    Representation = the Dataframe of the Stoichiometric matrix     #######
     def __repr__(self) -> str:
@@ -98,7 +94,7 @@ class model:
     # The attibute with __ are the one compute with numpy and aim to be call for other compuation
     # The attribute without it are only the representation of the them on dataframe
     
-    # Dynamic property
+    # MCA properties
     @property
     def __Jacobian(self) :
         return np.dot(self.Stoichio_matrix.to_numpy() , self.elasticity.s.to_numpy() )
@@ -109,7 +105,7 @@ class model:
 
     @property
     def __Jacobian_reversed(self) :
-        return  np.linalg.pinv(self.__Jacobian)  
+        return np.linalg.pinv(self.__Jacobian)  
     @property
     def Jacobian_reversed(self) :
         return pd.DataFrame(self.__Jacobian_reversed, index=self.Jacobian.columns, columns=self.Jacobian.index)
@@ -188,7 +184,7 @@ class model:
     def _update_network(self, session = "Matrix") -> None :
         ### Description of the fonction
         """
-        Fonction to update the dataframes after atribuated a new values to the stoichiomatrix
+        Fonction to update the dataframes after atribuated a new values to the stoichio matrix
         """
         
         if session == "Matrix" :
@@ -225,8 +221,9 @@ class model:
     def _update_elasticity(self) :
         ### Description of the fonction
         """
-        Fonction to update the dynamic matrix of the model after a direct modification of the stoichiometric matrix
+        Fonction to update the elasticities matrices of the model after a direct modification of the stoichiometric matrix
         """
+    
         for meta in self.Stoichio_matrix.index :
             if meta not in self.elasticity.s.columns :
                 self.elasticity.s[meta] = [0 for i in self.elasticity.s.index]
@@ -250,11 +247,12 @@ class model:
 
     #################################################################################
     ############     Function that return the correlation coefficient    ############
-    def rho(self, Absolute = False, deleted = [], dtype = float) :
+    def rho(self, Absolute = False, dtype = float) :
         ### Description of the fonction
         """
         Fonction to compute the correlation coefficient
         """
+
         Cov_df = self.covariance
         Cov = Cov_df.to_numpy()
 
@@ -420,7 +418,10 @@ class model:
 
     #############################################################################
     ###################   Function to read a SBML file  #########################
-    def read_SBML(self, file = "./Exemples/SBML/E_coli_CCM.xml") :
+    def read_SBML(self, directory = "./Exemples/SBML/", file_SBML = "E_coli_CCM.xml",
+                  reference_state_metabolites = "reference_state_metabolites.tsv", reference_state_c = "reference_state_c.tsv",
+                  reference_state_reactions   = "reference_state_reactions.tsv"  , reference_state_v = "reference_state_v.tsv",
+                  reference_state_keq         = "reference_state_keq.tsv"        ) :
         ### Description of the fonction
         """
         Fonction read a SBML file
@@ -430,11 +431,11 @@ class model:
         """
         import libsbml
 
+        # Reset of the model
         self.reset
         
         reader = libsbml.SBMLReader()
-
-        document = reader.readSBML(file)
+        document = reader.readSBML(directory + file_SBML)
         
         n_error = document.getNumErrors()
         if n_error != 0 :
@@ -483,6 +484,53 @@ class model:
                 N.fillna(0, inplace=True)
 
             self.Stoichio_matrix = N
+
+        # now we read the reference state
+        def tsv_to_list(file_tsv : str) :
+            # Work only if the file is a single colomn 
+            file_tsv = open(file_tsv)
+            list_meta_tsv = file_tsv.readlines()
+            file_tsv.close()
+            list_meta_tsv = [element.rstrip('\n') for element in list_meta_tsv]
+            return(list_meta_tsv)
+        
+        import os
+
+        # Reading the metabolites list
+        if os.path.exists(directory + reference_state_metabolites) :
+            list_metabolites    = tsv_to_list(directory + reference_state_metabolites)
+            # Reading the reference states of the concentrations of the metabolites
+            if os.path.exists(directory + reference_state_c) :
+                list_concentrations = tsv_to_list(directory + reference_state_c)
+                for i in range(len(list_metabolites)) :
+                    if list_metabolites[i] in self.metabolites.df.index :
+                        # Attribution of the concentrations to the dataframe
+                        self.metabolites.df.at[list_metabolites[i], 'Concentration (mmol/gDW)'] = float(list_concentrations[i])
+                    else :
+                        print(f"Warning : The metabolite {list_metabolites[i]} is not in the SBML file of the metabolic network !")
+        # Reading the reactions list
+        if os.path.exists(directory + reference_state_reactions) :
+            list_reactions = tsv_to_list(directory + reference_state_reactions)
+            # Reading the reference state of the reaction
+            if os.path.exists(directory + reference_state_v) :
+                list_flux      = tsv_to_list(directory + reference_state_v)
+                for i in range(len(list_reactions)) :
+                    if list_reactions[i] in self.reactions.df.index :
+                        # Attribution of the flux to the dataframe
+                        self.reactions.df.at[list_reactions[i], 'Flux (mmol/gDW/h)'] = float(list_flux[i])
+                    else :
+                        print(f"Warning : The reaction {list_reactions[i]} is not in the SBML file of the metabolic network !")
+
+            # reading the referecne state of the equilibrium constant
+            if os.path.exists(directory + reference_state_keq) :
+                list_keq     = tsv_to_list(directory + reference_state_keq)
+                for i in range(len(list_reactions)) :
+                    if list_reactions[i] in self.reactions.df.index :
+                        # Attributon of the keq to the dataframe
+                        self.reactions.df.at[list_reactions[i], 'Equilibrium constant'] = float(list_keq[i])
+
+
+
 
     #############################################################################
     ###################   Function to check the model   #########################
@@ -784,13 +832,11 @@ class model:
             else : 
                 matrix_sampled += self.rho().to_numpy()
 
-
         matrix_sampled /= (N+1)
-    
+
         self.__upload_state()
         
         return(matrix_sampled)
-
 
 
 
@@ -810,17 +856,16 @@ class model:
         self.__original_atributes["elasticities_p"]   = copy.deepcopy(self.elasticity.p)
         self.__original_atributes["enzymes"]          = copy.deepcopy(self.enzymes.df)
         
-
     #############################################################################
     ################   function to upload the saved state   #####################
     def __upload_state(self) :
+        self.Stoichio_matrix =   self.__original_atributes["stoichiometry"]
         self.metabolites.df  =   self.__original_atributes["metabolites"]
         self.reactions.df    =   self.__original_atributes["reactions"]
         self.parameters.df   =   self.__original_atributes["parameters"]
         self.elasticity.s    =   self.__original_atributes["elasticities_s"]
         self.elasticity.p    =   self.__original_atributes["elasticities_p"]
         self.enzymes.df      =   self.__original_atributes["enzymes"]
-        self.Stoichio_matrix =   self.__original_atributes["stoichiometry"]
 
 
 

@@ -57,7 +57,7 @@ class Metabolite_class:
         
         # Look if the metabolite is already in the model
         elif name in self.df.index :
-            raise TypeError("The metabolite \""+ name +"\" is already in the model !")
+            print("The metabolite \""+ name +"\" is already in the model !")
 
         # Else, the metabolite is add to the model by an add to the DataFrame
         else :
