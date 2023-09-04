@@ -69,7 +69,7 @@ class Regulation_class:
             raise NameError(f"The metabolite \"{regulator}\" is not in the metabolite dataframe !")
         
         # Else it's allright :D
-        self.df.loc[name] = [regulated, regulated, coefficient, type_regulation]
+        self.df.loc[name] = [regulated, regulator, coefficient, type_regulation]
     
 
         if allosteric == True :

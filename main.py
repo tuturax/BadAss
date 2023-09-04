@@ -783,6 +783,9 @@ class model:
             # Else it is tottaly random
             seed = np.random.randint(0,2**32,N)
 
+        import time
+        start = time.time()
+
         for i in range(N) :
             
             # Seed of the generation of random value
@@ -832,10 +835,13 @@ class model:
             else : 
                 matrix_sampled += self.rho().to_numpy()
 
+        
         matrix_sampled /= (N+1)
 
         self.__upload_state()
         
+        running_time = time.time() - start
+        print(f"running tiem of the code : {running_time} \nSo {running_time/N} per occurences !")
         return(matrix_sampled)
 
 
