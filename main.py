@@ -47,7 +47,7 @@ class model:
         self._Stoichio_matrix = pd.DataFrame()
 
         # Sampling file of the model
-        self.data_sampling = pd.DataFrame(columns=["Name","Type", "Standard deviation", "Distribution"])
+        self.data_sampling = pd.DataFrame(columns=["Name","Type","Mean", "Standard deviation", "Distribution"])
 
         print("Model created \n \nTo add metabolite, use .metabolites.add_meta \nTo add reaction,   use .reactions.add_reaction")
     
@@ -95,6 +95,8 @@ class model:
     # The attribute without it are only the representation of the them on dataframe
     
     # MCA properties
+
+    # Jacobian
     @property
     def __Jacobian(self) :
         return np.dot(self.Stoichio_matrix.to_numpy() , self.elasticity.s.to_numpy() )
@@ -102,7 +104,7 @@ class model:
     def Jacobian(self) :
         return pd.DataFrame(self.__Jacobian, index = self.metabolites.df.index, columns = self.elasticity.s.columns)
 
-
+    # Inverse of the Jacobian
     @property
     def __Jacobian_reversed(self) :
         return np.linalg.pinv(self.__Jacobian)  
@@ -110,6 +112,7 @@ class model:
     def Jacobian_reversed(self) :
         return pd.DataFrame(self.__Jacobian_reversed, index=self.Jacobian.columns, columns=self.Jacobian.index)
 
+    # Response coefficient of the metabolite 
     @property
     def __R_s_p(self) :
         return -np.dot(self.__Jacobian_reversed , np.dot(self.__Stoichio_matrix , self.elasticity.p.to_numpy() ))
@@ -140,9 +143,13 @@ class model:
 
     @property
     def __R(self) :
-        return( np.block([[self.R_s_p ],
+        J_inv = self.__Jacobian_reversed
 
-                          [self.R_v_p ]   ])       )
+        R_s_p = -np.dot(J_inv , np.dot(self.__Stoichio_matrix , self.elasticity.p.to_numpy() ))
+        R_v_p =  np.dot(self.elasticity.s.to_numpy() , R_s_p) + self.elasticity.p.to_numpy()
+        
+        return( np.block([[R_s_p ], 
+                          [R_v_p ]   ])       )
     @property
     def R(self) :
         return pd.DataFrame(self.__R, index = self.metabolites.df.index.to_list() + self.reactions.df.index.to_list() , columns=self.parameters.df.index)
@@ -154,18 +161,23 @@ class model:
     
     @property
     def __covariance(self) :
+
+        R = self.__R
+
         matrix_covariance_dx = np.identity(len(self.__Standard_deviations))
         for i in range(len(matrix_covariance_dx)) :
             matrix_covariance_dx[i][i] = self.__Standard_deviations[i]**2
         
-        matrix_RC = np.dot(self.R , matrix_covariance_dx)
+        matrix_RC = np.dot(R , matrix_covariance_dx)
 
         return(       np.block([[   matrix_covariance_dx              ,                     np.transpose(matrix_RC)         ],
 
-                                [   matrix_RC                         ,         np.dot(matrix_RC,np.transpose(self.R))      ]      ])  ) 
+                                [   matrix_RC                         ,                 np.dot(matrix_RC,np.transpose(R))      ]      ])  ) 
     @property
     def covariance(self) :
-        return pd.DataFrame(self.__covariance, index = (self.parameters.df.index.to_list() + self.R.index.to_list()) , columns = ( self.parameters.df.index.to_list() + self.R.index.to_list() ) )
+        return pd.DataFrame(self.__covariance, 
+                            index   = ( self.parameters.df.index.to_list() + self.metabolites.df.index.to_list() + self.reactions.df.index.to_list() )       , 
+                            columns = ( self.parameters.df.index.to_list() + self.metabolites.df.index.to_list() + self.reactions.df.index.to_list() )        )
 
 
 
@@ -247,26 +259,27 @@ class model:
 
     #################################################################################
     ############     Function that return the correlation coefficient    ############
-    def rho(self, Absolute = False, dtype = float) :
+    def rho(self, dtype = float) :
         ### Description of the fonction
         """
         Fonction to compute the correlation coefficient
         """
+        # Line to deal with the 1/0 
+        np.seterr(divide='ignore', invalid='ignore')
 
         Cov_df = self.covariance
         Cov = Cov_df.to_numpy()
 
         rho = np.zeros((Cov.shape[0], Cov.shape[1]), dtype=dtype)
         
-        if Absolute == True :
-            for i in range(Cov.shape[0]) :
-                for j in range(Cov.shape[1]) :
-                    rho[i][j] = (Cov[i][j])/((np.abs(Cov[i][i])*np.abs(Cov[j][j]))**0.5)
-        
-        else :
-            for i in range(Cov.shape[0]) :
-                for j in range(Cov.shape[1]) :
-                    rho[i][j] = (Cov[i][j])/((np.real(Cov[i][i])*np.real(Cov[j][j]))**0.5)
+
+        for i in range(Cov.shape[0]) :
+            for j in range(Cov.shape[1]) :
+                rho[i][j] = Cov[i][j] / ( ( Cov[i][i]*Cov[j][j] )**0.5 ) 
+
+
+        # Line to retablish the warning
+        np.seterr(divide='warn', invalid='warn')
 
         return (pd.DataFrame(rho, index = Cov_df.index , columns = Cov_df.columns))
 
@@ -298,6 +311,8 @@ class model:
 
             return(pd.DataFrame(MI, index = Cov_df.index , columns = Cov_df.columns ))
         
+
+
 
         # Else it mean that we study a group of variable
         elif type(groups) == list :
@@ -340,8 +355,6 @@ class model:
         return(MI)
 
                         
-
-
     #############################################################################
     ###############  Function to creat a simple linear network ##################
     def creat_linear(self, n : int) :
@@ -656,105 +669,140 @@ class model:
         plt.show()
 
     #############################################################################
+    ###################   Function add sampling data    #########################
+    def add_sampling_data(self, name, type_variable : str, mean = True, SD = 1, distribution = "uniform") :
+        ### Description of the fonction
+        """
+        Fonction add a new data to the data_sampling dataframe
+            
+        name           : string name of the variable to sample, list of 2 string in the case of elasticity
+        type_variable  : string that make reference to the type of the variable to sample
+        mean           : Mean of the variable, if mean = True, mean take the current value of the variable
+        SD             : float of the standard deviation of the random draw of the variable
+        distribution   : string that make reference to the type of distribution of the random draw of this variable
+        """
+
+        # Case where the elasticity p is sampled
+        if type_variable == "elasticity_p" :
+            # If the name is not a list in the case of the elasticity, it's bad
+            if type(name) != list :
+                raise TypeError("For the elasticity, be sure to use a list of 2 string, the first for the flux name and the second for the differtial of the elasticity")
+
+            # If the list have more or less than 2 elements, it's not valide
+            elif len(name) != 2 :
+                raise TypeError("For the elasticity, be sure to use a list of 2 string, the first for the flux name and the second for the differtial of the elasticity")
+
+            else :
+                # We attribute both elements of the list, the first must be the flux name and second the differential name's
+                flux, differential = name
+                # We check if the flux is in the model
+                if flux not in self.elasticity.p.index :
+                    raise NameError(f"The flux name \"{flux}\" is not in the elasticity matrix")
+
+                elif differential not in self.elasticity.p.columns : 
+                    raise NameError(f"The differential name \"{differential}\" is not in the elasticity matrices E_p")
+                
+                if type(mean) == bool :
+                    mean = self.elasticity.p.at[flux, differential]
+        
+        # Case where the elasticity s is sampled
+        elif type_variable == "elasticity_s" :
+            # If the name is not a list in the case of the elasticity, it's bad
+            if type(name) != list :
+                raise TypeError("For the elasticity, be sure to use a list of 2 string, the first for the flux name and the second for the differtial of the elasticity")
+
+            # If the list have more or less than 2 elements, it's not valide
+            elif len(name) != 2 :
+                raise TypeError("For the elasticity, be sure to use a list of 2 string, the first for the flux name and the second for the differtial of the elasticity")
+
+            else :
+                # We attribute both elements of the list, the first must be the flux name and second the differential name's
+                flux, differential = name
+                # We check if the flux is in the model
+                if flux not in self.elasticity.s.index :
+                    raise NameError(f"The flux name \"{flux}\" is not in the elasticity matrix")
+
+                elif differential not in self.elasticity.s.columns : 
+                    raise NameError(f"The differential name \"{differential}\" is not in the elasticity matrices E_s")
+
+                if type(mean) == bool :
+                    mean = self.elasticity.s.at[flux, differential]
+
+        # Case where a parameter is sampled
+        elif type_variable == "parameter" :
+            if name not in self.parameters.df.index :
+                    raise NameError(f"The parameter name \"{name}\" is not in the parameters dataframe")
+            
+            if type(mean) == bool :
+                    mean = self.parameters.at[name, "Mean values"]
+
+        # Case where the metabolite concentration is sampled                  
+        elif type_variable == "metabolite" or type_variable == "concentration" :
+            if name not in self.metabolites.df.index :
+                    raise NameError(f"The metabolite name \"{name}\" is not in the metabolites dataframe")
+
+            if type(mean) == bool :
+                    mean = self.metabolites.at[name, 'Concentration (mmol/gDW)']
+
+        # Case where the flux is sampled
+        elif type_variable == "flux" or type_variable == "reaction" :
+            if name not in self.reactions.df.index :
+                    raise NameError(f"The flux name \"{name}\" is not in the reactions dataframe")
+
+            if type(mean) == bool :
+                mean = self.reactions.at[name, 'Flux (mmol/gDW/h)']
+
+
+        # Case where a enzyme concentration/activity is sampled
+        elif type_variable == "enzyme" :
+            if name not in self.enzymes.df.index :
+                    raise NameError(f"The enzyme name \"{name}\" is not in the enzymes dataframe")
+            if type(mean) == bool :
+                mean = self.reactions.at[name, 'Concentration / Activity']
+
+        else : 
+            raise NameError(f"The type \"{type_variable}\" is not available \n\nThe type of variable allowed are :\n- elasticity_p\n- elasticity_s\n- parameter\n- metabolite or concentration\n- reaction or flux\n- enzyme")
+        
+
+        # Let's check if the name of the distribution are correct
+        distribution_allowed = ["uniform" , "normal", "lognormal", "beta"]
+        if distribution.lower() not in distribution_allowed :
+            raise NameError(f"The name of the distribution \"{distribution}\" is not handle by the programme !\n\nHere is the distribution allowed :\n- uniform\n- normal\n- lognormal\n- beta")
+
+        index = 0
+        while index in self.data_sampling.index :
+            index += 1
+        
+        self.data_sampling.loc[index] = [name, type_variable, mean, SD, distribution]
+
+
+    #############################################################################
     ###################   Function sampled the model    #########################
     def sampling(self, N : int, result = "MI", seed_constant = 1) :
+        ### Description of the fonction
+        """
+        Fonction launch a sampling study, it return the mean value of the matrix
+
+        N              : Number of random draw done for each variable of the .data_sampling dataframe
+        result         : matrix returned by the code
+        seed_constant  : float that is the seed of our radom draw
+        """  
+
         # If the number of sample asked if < 1 = bad
         if N < 1 :
             raise ValueError("The number of sample must be greater or egual to 1 !")
-        
-        # We check every name of in the sampling dataframe
-        for index in self.data_sampling.index :
-            type_samp = self.data_sampling.loc[index, "Type"].lower()  # .lower() = put the string in lowercase
-            name = self.data_sampling.loc[index, "Name"]
 
-
-            # Case where the elasticity p is sampled
-            if type_samp == "elasticity_p" :
-                # If the name is not a list in the case of the elasticity, it's bad
-                if type(name) != list :
-                    raise TypeError("For the elasticity, be sure to use a list of 2 string, the first for the flux name and the second for the differtial of the elasticity")
-
-                # If the list have more or less than 2 elements, it's not valide
-                elif len(name) != 2 :
-                    raise TypeError("For the elasticity, be sure to use a list of 2 string, the first for the flux name and the second for the differtial of the elasticity")
-
-                else :
-                    # We attribute both elements of the list, the first must be the flux name and second the differential name's
-                    flux, differential = name
-                    # We check if the flux is in the model
-                    if flux not in self.elasticity.p.index :
-                        raise NameError(f"The flux name \n{flux}\n is nnot in the elasticity matrix")
-
-                    elif differential not in self.elasticity.p.columns : 
-                        raise NameError(f"The differential name \n{differential}\n is not in the elasticity matrices E_p")
-            
-
-            # Case where the elasticity s is sampled
-            elif type_samp == "elasticity_s" :
-                # If the name is not a list in the case of the elasticity, it's bad
-                if type(name) != list :
-                    raise TypeError("For the elasticity, be sure to use a list of 2 string, the first for the flux name and the second for the differtial of the elasticity")
-
-                # If the list have more or less than 2 elements, it's not valide
-                elif len(name) != 2 :
-                    raise TypeError("For the elasticity, be sure to use a list of 2 string, the first for the flux name and the second for the differtial of the elasticity")
-
-                else :
-                    # We attribute both elements of the list, the first must be the flux name and second the differential name's
-                    flux, differential = name
-                    # We check if the flux is in the model
-                    if flux not in self.elasticity.s.index :
-                        raise NameError(f"The flux name \n{flux}\n is nnot in the elasticity matrix")
-
-                    elif differential not in self.elasticity.s.columns : 
-                        raise NameError(f"The differential name \n{differential}\n is not in the elasticity matrices E_s")
-            
-                
-            # Case where a parameter is sampled
-            elif type_samp == "parameter" :
-                if name not in self.parameters.df.index :
-                        raise NameError(f"The parameter name \n{name}\n is not in the parameters dataframe")
-
-
-            # Case where the metabolite concentration is sampled                  
-            elif type_samp == "metabolite" :
-                if name not in self.metabolites.df.index :
-                        raise NameError(f"The metabolite name \n{name}\n is not in the metabolites dataframe")
-
-
-            # Case where the flux s is sampled
-            elif type_samp == "flux" :
-                if name not in self.reactions.df.index :
-                        raise NameError(f"The flux name \n{name}\n is not in the reactions dataframe")
-
-
-            # Case where a enzyme concentration/activity is sampled
-            elif type_samp == "enzyme" :
-                if name not in self.enzymes.df.index :
-                        raise NameError(f"The enzyme name \n{name}\n is not in the enzymes dataframe")
-
-
-            else : 
-                raise NameError(f"The type \n{type_samp}\n is not available")
-        
-        # Let's check if the name of the distribution are correct
-        distribution_allowed = ["uniform" , "normal", "beta"]
-        for index in self.data_sampling.index :
-            type_Distribution = self.data_sampling.loc[index, "Distribution"]
-            if type_Distribution.lower() not in distribution_allowed :
-                raise NameError(f"The name of the distribution {type_Distribution} is not handle by the programme !")
-
-
-        ## At this state, the datframe of the sampling data is well build
-
-
-        def value_rand(type_samp :str , SD : float , mean : float) :
+        # Internal function that define the random draw
+        def value_rand(type_samp :str, mean : float, SD : float) :
             if type_samp.lower() == "uniform" :
                 deviation = (9*SD)**0.25
                 return np.random.uniform(mean-deviation , mean + deviation)
             
             elif type_samp.lower() == "normal" :
                 return np.random.normal(mean, SD)
+            
+            elif type_samp.lower() == "lognormal" :
+                return np.random.lognormal(mean, SD)
             
             elif type_samp.lower() == "beta" :
                 alpha = (( ( 1-mean )/( (np.sqrt(SD))*(2-mean)**2) )-1)/(2-mean)
@@ -771,9 +819,6 @@ class model:
 
         matrix_sampled = data_frame.to_numpy()
 
-        # We save the original value of the model
-        self.__save_state()
-
         # Conditional line to deal with the seed of the random values generator
         # If seed_constant is an int, than we use this int as seed to generate the seed of other random value
         if type(seed_constant) == int :
@@ -783,6 +828,11 @@ class model:
             # Else it is tottaly random
             seed = np.random.randint(0,2**32,N)
 
+        # We save the original value of the model
+        self.__save_state()
+
+
+        # Time Counter
         import time
         start = time.time()
 
@@ -791,45 +841,33 @@ class model:
             # Seed of the generation of random value
             np.random.seed(seed[i])
             seed_2 = np.random.randint(low = 0, high = 2**32, size = self.data_sampling.shape[0])
-            compteur = 0
 
-            for index in self.data_sampling.index :
+            for i, index in enumerate(self.data_sampling.index) :
 
                 # Change of the seed of the radom value generator
-                np.random.seed(seed_2[compteur])
-                compteur += 1
+                np.random.seed(seed_2[i])
 
-                name               = self.data_sampling.at[index, "Name"]
-                type_variable      = self.data_sampling.at[index, "Type"]
-                standard_deviation = self.data_sampling.at[index, "Standard deviation"]
-                type_samp          = self.data_sampling.at[index, "Distribution"]
+                if self.data_sampling.at[index, "Type"].lower() == "elasticity_p" :
+                    flux, differential = self.data_sampling.at[index, "Name"]
+                    self.elasticity.p.at[flux, differential] = value_rand(self.data_sampling.at[index, "Distribution"], self.data_sampling.at[index, "Standard deviation"] , self.data_sampling.at[index, "Mean"] )
 
-                if type_variable.lower() == "elasticity_p" :
-                    flux, differential = name
-                    mean = self.__original_atributes["elasticities_p"].at[flux, differential]
-                    self.elasticity.p.at[flux, differential] = value_rand(type_samp, standard_deviation, mean)
+                elif self.data_sampling.at[index, "Type"].lower() == "elasticity_s" :
+                    flux, differential = self.data_sampling.at[index, "Name"]
+                    self.elasticity.s.at[flux, differential] = value_rand(self.data_sampling.at[index, "Distribution"], self.data_sampling.at[index, "Standard deviation"] , self.data_sampling.at[index, "Mean"] )
 
-                elif type_variable.lower() == "elasticity_s" :
-                    flux, differential = name
-                    mean = self.__original_atributes["elasticities_s"].at[flux, differential]
-                    self.elasticity.s.loc[flux, differential] = value_rand(type_samp, standard_deviation, mean)
+                elif self.data_sampling.at[index, "Type"].lower() == "parameter" :
+                    self.parameters.df.at[self.data_sampling.at[index, "Name"], 'Mean values']               = value_rand(self.data_sampling.at[index, "Distribution"], self.data_sampling.at[index, "Standard deviation"] , self.data_sampling.at[index, "Mean"] )
 
-                elif type_variable.lower() == "parameter" :
-                    mean = self.__original_atributes["parameters"].at[name, 'Mean values']
-                    self.parameters.df.at[name, 'Mean values'] = value_rand(type_samp, standard_deviation, mean)
-
-                elif type_variable.lower() == "metabolite" :
-                    mean = self.__original_atributes["metabolite"].at[name, 'Concentration (mmol/gDW)']
-                    self.metabolites.df.at[name, 'Concentration (mmol/gDW)'] = value_rand(type_samp, standard_deviation, mean)
+                elif self.data_sampling.at[index, "Type"].lower() == "metabolite" :
+                    self.metabolites.df.at[self.data_sampling.at[index, "Name"], 'Concentration (mmol/gDW)'] = value_rand(self.data_sampling.at[index, "Distribution"], self.data_sampling.at[index, "Standard deviation"] , self.data_sampling.at[index, "Mean"] )
                 
-                elif type_variable.lower() == "flux" :
-                    mean = self.__original_atributes["reactions"].at[name, 'Flux (mmol/gDW/h)']
-                    self.metabolites.df.at[name, 'Flux (mmol/gDW/h)'] = value_rand(type_samp, standard_deviation, mean)
+                elif self.data_sampling.at[index, "Type"].lower() == "flux" :
+                    self.metabolites.df.at[self.data_sampling.at[index, "Name"], 'Flux (mmol/gDW/h)']        = value_rand(self.data_sampling.at[index, "Distribution"], self.data_sampling.at[index, "Standard deviation"] , self.data_sampling.at[index, "Mean"] )
                 
-                elif type_variable.lower() == "enzyme" :
-                    mean = self.__original_atributes["enzymes"].at[name, 'Concentration / Activity']
-                    self.metabolites.df.at[name, 'Concentration / Activity'] = value_rand(type_samp, standard_deviation, mean)
-            
+                elif self.data_sampling.at[index, "Type"].lower() == "enzyme" :
+                    self.metabolites.df.at[self.data_sampling.at[index, "Name"], 'Concentration / Activity'] = value_rand(self.data_sampling.at[index, "Distribution"], self.data_sampling.at[index, "Standard deviation"] , self.data_sampling.at[index, "Mean"] )
+
+
             if result == "MI" :
                 matrix_sampled += self.MI().to_numpy()
             else : 
