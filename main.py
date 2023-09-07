@@ -150,6 +150,7 @@ class model:
         
         return( np.block([[R_s_p ], 
                           [R_v_p ]   ])       )
+    
     @property
     def R(self) :
         return pd.DataFrame(self.__R, index = self.metabolites.df.index.to_list() + self.reactions.df.index.to_list() , columns=self.parameters.df.index)
