@@ -3,6 +3,8 @@
 #####################
 import numpy as np
 import pandas as pd
+import sympy
+import scipy
 
 from layer_1.reactions    import Reaction_class
 from layer_1.metabolites  import Metabolite_class
@@ -50,7 +52,9 @@ class model:
         self.data_sampling = pd.DataFrame(columns=["Name","Type","Mean", "Standard deviation", "Distribution"])
 
         print("Model created \n \nTo add metabolite, use .metabolites.add_meta \nTo add reaction,   use .reactions.add_reaction")
-    
+
+        self.__cache_Link_matrix = None
+        self.__cache_Reduced_Stoichio_matrix = None
     #################################################################################
     ######    Representation = the Dataframe of the Stoichiometric matrix     #######
     def __repr__(self) -> str:
@@ -62,10 +66,10 @@ class model:
     @property
     def Stoichio_matrix(self) :
         return self._Stoichio_matrix
-    
     @property
     def __Stoichio_matrix(self) :
         return self.Stoichio_matrix.to_numpy()
+    
     @property
     def reactions(self) :
         return self.__reactions
@@ -90,7 +94,88 @@ class model:
     def elasticity(self) :
         return self.__elasticities
     
-   
+    @property
+    def Link_matrix(self) :
+        # If the value isn't None, return the cache value
+        if self.__cache_Link_matrix is not None:
+            return (self.__cache_Link_matrix, self.__cache_Reduced_Stoichio_matrix)
+        
+
+        def is_independent(Nr, new_row) :
+            # Creation of a matrix of linearly independant row + the line to analyse
+            Nr_test = np.block([ [ Nr  ] , 
+                            [ new_row ] ]) 
+            # Call of the Reduced Row-Echelon Form (.rref) 
+            echelon_matrix, Independent_row = sympy.Matrix(np.transpose(Nr_test)).T.rref() 
+            # If the last line of the the reduced echelon form of the new matrix is null => the new row is non independent
+            for element in echelon_matrix[-1, :] :
+                if element != 0 :
+                    return True
+            return False
+
+        def link_matrix(N_df) :
+
+            N = N_df.to_numpy()
+
+            
+            Independent_rows = [ ]
+            Dependent_rows   = [ ]
+            # Else we consider the first row of the matrix that is not external as the first row of the reduced Nr matrix
+            index_start = 0
+            while self.metabolites.df.at[self.metabolites.df.index[index_start], 'External'] == True :
+                Dependent_rows.append(index_start)
+                index_start += 1
+            
+            Nr = N[index_start]
+            Independent_rows.append(index_start)
+            index_start += 1
+
+            # Test to determine if the first non-external row of the matrix is null
+            test_first_line = False
+            for i in range(N.shape[1]) :
+                if N[index_start][i] != 0 :
+                    test_first_line = True
+            
+            if test_first_line == False :
+                raise ValueError(f"The {index_start}-th line is the first one that represent a non-external metabolite, but it is full of 0 !")
+            
+
+            # For every row of N, of the RREF of Nr + the row have a non-null elements
+            # => this row is independent
+            for i,row in enumerate(N[index_start:]) :
+                
+                # If the metabolite isn't considered as a external metabolite
+                if self.metabolites.df.at[self.metabolites.df.index[index_start+i], 'External'] == False :
+                    # If the row is independent, we add it to Nr
+                    if is_independent(Nr, row) :
+                        Independent_rows.append(index_start + i)
+                        Nr = np.block([ [ Nr  ] , 
+                                        [ row ] ])
+                    
+                    else :
+                        Dependent_rows.append(index_start + i)
+                    
+                else :
+                    Dependent_rows.append(index_start + i)
+            
+            
+            L = np.round(np.dot(N, np.linalg.pinv(Nr)), 12)
+
+            Nr = pd.DataFrame( columns=N_df.columns )
+            
+            for i, metabolite in enumerate(N_df.index) :
+                if i in Independent_rows :
+                    Nr.loc[metabolite] = N_df.loc[metabolite]
+
+
+
+            return(L, Nr)
+        
+        self.__cache_Link_matrix, self.__cache_Reduced_Stoichio_matrix = link_matrix(self.Stoichio_matrix)
+
+        return (self.__cache_Link_matrix, self.__cache_Reduced_Stoichio_matrix)
+
+
     # The attibute with __ are the one compute with numpy and aim to be call for other compuation
     # The attribute without it are only the representation of the them on dataframe
     
@@ -143,9 +228,10 @@ class model:
 
     @property
     def __R(self) :
+        J = self.__Jacobian
         J_inv = self.__Jacobian_reversed
 
-        R_s_p = -np.dot(J_inv , np.dot(self.__Stoichio_matrix , self.elasticity.p.to_numpy() ))
+        R_s_p = -np.linalg.solve(J , np.dot(self.__Stoichio_matrix , self.elasticity.p.to_numpy() ))
         R_v_p =  np.dot(self.elasticity.s.to_numpy() , R_s_p) + self.elasticity.p.to_numpy()
         
         return( np.block([[R_s_p ], 
@@ -191,6 +277,9 @@ class model:
     def Stoichio_matrix(self, new_df) :
         self._Stoichio_matrix = new_df
         self._update_network()
+        
+        # Update of the link matrix
+        self.__cache_Link_matrix = None
 
     
 
@@ -498,6 +587,12 @@ class model:
                 N.fillna(0, inplace=True)
 
             self.Stoichio_matrix = N
+
+            # Set the metabolite as external
+            for specie in model.species :
+                if specie.boundary_condition :
+                    self.metabolites.df.at[specie.name, 'External'] = True
+
 
         # now we read the reference state
         def tsv_to_list(file_tsv : str) :
@@ -919,5 +1014,14 @@ class model:
     @property
     def reset(self) :
         self.__init__()
+
+
+
+
+
+
+
+
+
 
 

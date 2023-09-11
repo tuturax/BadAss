@@ -51,7 +51,8 @@ class Elasticity_class:
                 self._s.values[:] = matrix
                 
         
-        if type(matrix) == type(pd.DataFrame()) :
+        elif type(matrix) == type(pd.DataFrame()) :
+
             if matrix.shape != self.s.shape :
                 raise IndexError("The shape of your matrix isn't matching with the elasticity matrix")
             else : 
