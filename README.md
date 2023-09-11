@@ -1,5 +1,5 @@
 # BadAsss Git
-## Biological Analysis designed for A Sterady-State System
+## Biological Analysis designed for A Steady-State System
 
 # Welcome to the Arthur's GitHub
 
