@@ -145,16 +145,20 @@ class model:
             for i,row in enumerate(N[index_start:]) :
                 
                 # If the metabolite isn't considered as a external metabolite
-                if self.metabolites.df.at[self.metabolites.df.index[index_start+i], 'External'] == False :
-                    # If the row is independent, we add it to Nr
-                    if is_independent(Nr, row) :
-                        Independent_rows.append(index_start + i)
-                        Nr = np.block([ [ Nr  ] , 
-                                        [ row ] ])
-                    
-                    else :
-                        Dependent_rows.append(index_start + i)
-                    
+                if self.metabolites.df.at[self.metabolites.df.index[index_start+i], 'External'] == True :
+                    Dependent_rows.append(index_start + i)
+
+
+                # If the every element of the row is null => we consider it as dependent
+                elif np.max(np.abs(N[index_start+i])) == 0 : 
+                    Dependent_rows.append(index_start + i)
+
+                # If the row is independent, we add it to Nr
+                elif is_independent(Nr, row) :
+                    Independent_rows.append(index_start + i)
+                    Nr = np.block([ [ Nr  ] , 
+                                    [ row ] ])
+                       
                 else :
                     Dependent_rows.append(index_start + i)
             
@@ -184,18 +188,23 @@ class model:
     # Jacobian
     @property
     def __Jacobian(self) :
-        return np.dot(self.Stoichio_matrix.to_numpy() , self.elasticity.s.to_numpy() )
+        L, Nr = self.Link_matrix
+        J = np.dot( Nr.to_numpy(), np.dot(self.elasticity.s.to_numpy(), L))
+        return J
     @property
     def Jacobian(self) :
-        return pd.DataFrame(self.__Jacobian, index = self.metabolites.df.index, columns = self.elasticity.s.columns)
+        Nr = self.Link_matrix[1]
+        return pd.DataFrame(self.__Jacobian, index = Nr.index, columns = Nr.index)
 
     # Inverse of the Jacobian
     @property
     def __Jacobian_reversed(self) :
-        return np.linalg.pinv(self.__Jacobian)  
+        return np.linalg.inv(self.__Jacobian)  
     @property
     def Jacobian_reversed(self) :
-        return pd.DataFrame(self.__Jacobian_reversed, index=self.Jacobian.columns, columns=self.Jacobian.index)
+        J_df = self.Jacobian
+        J_inv = np.linalg.inv(J_df.to_numpy())
+        return pd.DataFrame(J_inv, index=J_df.index, columns=J_df.columns)
 
     # Response coefficient of the metabolite 
     @property
@@ -229,16 +238,18 @@ class model:
     @property
     def __R(self) :
         J = self.__Jacobian
-        J_inv = self.__Jacobian_reversed
+        L, Nr = self.Link_matrix
+        Nr = Nr.to_numpy()
 
-        R_s_p = -np.linalg.solve(J , np.dot(self.__Stoichio_matrix , self.elasticity.p.to_numpy() ))
+        R_s_p = -np.dot(L, np.dot( np.linalg.solve(J , Nr) , self.elasticity.p.to_numpy()  ))
         R_v_p =  np.dot(self.elasticity.s.to_numpy() , R_s_p) + self.elasticity.p.to_numpy()
-        
+
         return( np.block([[R_s_p ], 
                           [R_v_p ]   ])       )
     
     @property
     def R(self) :
+        print(self.__R.shape)
         return pd.DataFrame(self.__R, index = self.metabolites.df.index.to_list() + self.reactions.df.index.to_list() , columns=self.parameters.df.index)
 
 
@@ -251,15 +262,16 @@ class model:
 
         R = self.__R
 
-        matrix_covariance_dx = np.identity(len(self.__Standard_deviations))
-        for i in range(len(matrix_covariance_dx)) :
-            matrix_covariance_dx[i][i] = self.__Standard_deviations[i]**2
+        covariance_dp = np.identity(len(self.__Standard_deviations))
+        for i in range(len(covariance_dp)) :
+            covariance_dp[i][i] = self.__Standard_deviations[i]**2
         
-        matrix_RC = np.dot(R , matrix_covariance_dx)
+        matrix_RC = np.dot( R, covariance_dp )
 
-        return(       np.block([[   matrix_covariance_dx              ,                     np.transpose(matrix_RC)         ],
+        Cov =      np.block([[   covariance_dp       ,                  np.dot( covariance_dp, R.T )             ],
 
-                                [   matrix_RC                         ,                 np.dot(matrix_RC,np.transpose(R))      ]      ])  ) 
+                             [     matrix_RC         ,            np.dot(matrix_RC,  np.transpose(R))  ] ]     )  
+        return(Cov)
     @property
     def covariance(self) :
         return pd.DataFrame(self.__covariance, 
@@ -393,13 +405,17 @@ class model:
 
         # If the groups variables is empty, we return the mutual information of every single variables and parameters
         if groups == [] :
-            MI = np.zeros(Cov.shape)
+            I = np.zeros(Cov.shape)
 
             for i in range(Cov.shape[0]) :
                 for j in range(Cov.shape[1]) :
-                    MI[i][j] = (1/(2*np.log(2))) * np.log( Cov[i][i]*Cov[j][j] / (Cov[i][i]*Cov[j][j] - Cov[i][j]*Cov[j][i]))
+                    denominator = Cov[i][i]*Cov[j][j] - Cov[i][j]*Cov[j][i]
+                    if denominator == 0 :
+                        I[i][j] = 0
+                    else :
+                        I[i][j] = (1/(2*np.log(2))) * np.log( Cov[i][i]*Cov[j][j] / denominator )
 
-            return(pd.DataFrame(MI, index = Cov_df.index , columns = Cov_df.columns ))
+            return(pd.DataFrame(I, index = Cov_df.index , columns = Cov_df.columns ))
         
 
 
@@ -423,7 +439,7 @@ class model:
                     raise NameError(f"The variables {variable} is not in the covariance matrix !")
                 
         # Initialisation of the MI matrix
-        MI = pd.DataFrame( index = dictionnary.keys(), columns=dictionnary.keys() , dtype=float)
+        I = pd.DataFrame( index = dictionnary.keys(), columns=dictionnary.keys() , dtype=float)
 
         for key1 in dictionnary.keys() :
             for key2 in dictionnary.keys() :
@@ -435,14 +451,14 @@ class model:
                 Cov_2 = Cov_df.loc[group2, group2].to_numpy()
                 Cov_3 = Cov_df.loc[group1 + group2, group1 + group2].to_numpy()
 
-                MI.loc[key1, key2] = (1/(2*np.log(2)))*np.log(np.linalg.det(Cov_1)*np.linalg.det(Cov_2)/np.linalg.det(Cov_3))
+                I.loc[key1, key2] = (1/(2*np.log(2)))*np.log(np.linalg.det(Cov_1)*np.linalg.det(Cov_2)/np.linalg.det(Cov_3))
         
 
 
         # Line to retablish the warning
         np.seterr(divide='warn', invalid='warn')
 
-        return(MI)
+        return I
 
                         
     #############################################################################
@@ -678,26 +694,30 @@ class model:
 
     #############################################################################
     ###################   Function plot the MI matrix   #########################
-    def plot(self, result = "MI", title = "", label = True, value_in_cell = True, index_to_keep = []) :
+    def plot(self, result = "MI", title = "", label = False, value_in_cell = False, index_to_keep = []) :
         import matplotlib
         import matplotlib.pyplot as plt
 
-        # Get the rho matrix
-        if result == "MI" :
+        # Get the dataframe of the result
+        result = result.lower()
+
+        if result == "mi" or result == "mutual information":
             data_frame = self.MI()
-        else : 
+        elif result == "rho" or result == "correlation" : 
             data_frame = self.rho()
+        elif result == "cov" or result == "covariance" :
+            data_frame = self.covariance
 
         # Look the index to keep for the plot of the matrix 
         index_to_keep_bis = []
         # If nothing is specified, we keep everything
         #else
-        if len(index_to_keep) != 0 :
+        if index_to_keep != [] :
             # We take a look at every index that the user enter
             for index in index_to_keep :
                 # If one of them is not in the model, we told him
                 if index not in data_frame.index :
-                    raise IndexError(f"- {index} is not in the correlation matrix")
+                    raise NameError(f"- {index} is not in the correlation matrix")
                 # else, we keep in memory the index that are in the model
                 else :
                     index_to_keep_bis.append(index)
@@ -709,16 +729,21 @@ class model:
         data_frame = data_frame.loc[index_to_keep_bis, index_to_keep_bis]
         matrix = data_frame.to_numpy()
 
+        data_frame
 
         fig, ax = plt.subplots()
 
-        if result.lower() == "mi" :
+        if result == "mi" :
             custom_map = matplotlib.colors.LinearSegmentedColormap.from_list( "custom", ["white", "blue"])
-            im = plt.imshow(matrix, cmap=custom_map, vmin= 0, vmax= np.max(matrix) )
+            im = plt.imshow(matrix, cmap=custom_map, norm=matplotlib.colors.LogNorm() )
 
-        elif result.lower() == "rho" :
+        elif result == "rho" :
             custom_map = matplotlib.colors.LinearSegmentedColormap.from_list( "custom", ["red", "white", "blue"])
-            im = plt.imshow(matrix, cmap=custom_map, vmin= -1, vmax= 1 )
+            im = plt.imshow(matrix, cmap=custom_map, vmin= -1, vmax= 1)
+
+        elif result == "cov" :
+            custom_map = matplotlib.colors.LinearSegmentedColormap.from_list( "custom", ["white", "blue"])
+            im = plt.imshow(matrix, cmap=custom_map)
 
         # Display the label next to the axis
         if label == True :
