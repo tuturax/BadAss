@@ -72,9 +72,11 @@ class Parameter_class():
         else :
             # Else, the parameter is remove from the dataframe
             self.df.drop(name, inplace=True)
-            
+
+            print(f"Nom du paramètre retiré : {name}")
+
             # Removing this parameter from the elasticity matrix E_p
-            if name in self.__class_model_instance.elasticity.p.index :
+            if name in self.__class_model_instance.elasticity.p.columns :
                 self.__class_model_instance.elasticity.p.drop(name, axis = 1, inplace = True)
 
     ##################################################################################

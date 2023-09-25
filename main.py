@@ -405,17 +405,17 @@ class model:
 
         # If the groups variables is empty, we return the mutual information of every single variables and parameters
         if groups == [] :
-            I = np.zeros(Cov.shape)
+            MI = np.zeros(Cov.shape)
 
             for i in range(Cov.shape[0]) :
                 for j in range(Cov.shape[1]) :
                     denominator = Cov[i][i]*Cov[j][j] - Cov[i][j]*Cov[j][i]
                     if denominator == 0 :
-                        I[i][j] = 0
+                        MI[i][j] = 0
                     else :
-                        I[i][j] = (1/(2*np.log(2))) * np.log( Cov[i][i]*Cov[j][j] / denominator )
+                        MI[i][j] = (1/(2*np.log(2))) * np.log( Cov[i][i]*Cov[j][j] / denominator )
 
-            return(pd.DataFrame(I, index = Cov_df.index , columns = Cov_df.columns ))
+            return(pd.DataFrame(MI, index = Cov_df.index , columns = Cov_df.columns ))
         
 
 
@@ -439,7 +439,7 @@ class model:
                     raise NameError(f"The variables {variable} is not in the covariance matrix !")
                 
         # Initialisation of the MI matrix
-        I = pd.DataFrame( index = dictionnary.keys(), columns=dictionnary.keys() , dtype=float)
+        MI = pd.DataFrame( index = dictionnary.keys(), columns=dictionnary.keys() , dtype=float)
 
         for key1 in dictionnary.keys() :
             for key2 in dictionnary.keys() :
@@ -451,14 +451,14 @@ class model:
                 Cov_2 = Cov_df.loc[group2, group2].to_numpy()
                 Cov_3 = Cov_df.loc[group1 + group2, group1 + group2].to_numpy()
 
-                I.loc[key1, key2] = (1/(2*np.log(2)))*np.log(np.linalg.det(Cov_1)*np.linalg.det(Cov_2)/np.linalg.det(Cov_3))
+                MI.loc[key1, key2] = (1/(2*np.log(2)))*np.log(np.linalg.det(Cov_1)*np.linalg.det(Cov_2)/np.linalg.det(Cov_3))
         
 
 
         # Line to retablish the warning
         np.seterr(divide='warn', invalid='warn')
 
-        return I
+        return MI
 
                         
     #############################################################################
