@@ -70,7 +70,7 @@ class Reaction_class:
                 if reaction not in self.__class_model_instance.Stoichio_matrix.columns :
                     # We add a colomn of 0
                     self.__class_model_instance.Stoichio_matrix[reaction] = [0 for i in range(self.__class_model_instance.Stoichio_matrix.shape[0])]
-                    
+
                     # We check the stoichiometric coefficient link to this reaction in order to automatically add them to the matrix
                     for meta in list(self.df.loc[reaction, 'Metabolites'].keys()) :
                         if meta not in self.__class_model_instance.Stoichio_matrix.index :
@@ -79,7 +79,6 @@ class Reaction_class:
 
                         # Then we add the correct stoichiometric coefficients
                         self.__class_model_instance.Stoichio_matrix.loc[meta, reaction] = self.df.loc[reaction, 'Metabolites'][meta]
-
 
             # Updating the network
             #self.__class_model_instance._update_network(session="reaction")
@@ -116,7 +115,7 @@ class Reaction_class:
 
 
             # Remove this metabolite from the elasticity matrix E_s
-            self.__class_model_instance.elasticity.s.drop(name, axis = 0, inplace = True)
+            self.__class_model_instance.elasticity.s.df.drop(name, axis = 0, inplace = True)
             self.__class_model_instance.elasticity.p.drop(name, axis = 0, inplace = True)
 
 

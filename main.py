@@ -52,6 +52,8 @@ class model:
         self.data_sampling = pd.DataFrame(columns=["Name","Type","Mean", "Standard deviation", "Distribution"])
 
         print("Model created \n \nTo add metabolite, use .metabolites.add_meta \nTo add reaction,   use .reactions.add_reaction")
+        self.__cache_reactions_s = []
+        self.__cache_reactions_p = []
 
         self.__cache_Link_matrix = None
         self.__cache_Reduced_Stoichio_matrix = None
@@ -188,8 +190,8 @@ class model:
     # Jacobian
     @property
     def __Jacobian(self) :
-        L, Nr = self.Link_matrix
-        J = np.dot( Nr.to_numpy(), np.dot(self.elasticity.s.to_numpy(), L))
+        L, Nr = self.Shorts
+        J = np.dot( Nr.to_numpy(), np.dot(self.elasticity.s.df.to_numpy(), L))
         return J
     @property
     def Jacobian(self) :
@@ -216,21 +218,21 @@ class model:
     
     @property
     def __R_v_p(self) :
-        return np.dot(self.elasticity.s.to_numpy() , self.__R_s_p) + self.elasticity.p.to_numpy()
+        return np.dot(self.elasticity.s.df.to_numpy() , self.__R_s_p) + self.elasticity.p.to_numpy()
     @property
     def R_v_p(self) :
         return pd.DataFrame(self.__R_v_p, index = self.reactions.df.index, columns = self.parameters.df.index)
     
     @property
     def __R_s_c(self) :
-        return -np.dot(self.Jacobian_reversed , np.dot(self.__Stoichio_matrix , self.elasticity.s.to_numpy() ) ) + np.identity(len(self.__Stoichio_matrix))
+        return -np.dot(self.Jacobian_reversed , np.dot(self.__Stoichio_matrix , self.elasticity.s.df.to_numpy() ) ) + np.identity(len(self.__Stoichio_matrix))
     @property
     def R_s_c(self) :
         return pd.DataFrame(self.__R_s_c, index = self.metabolites.df.index, columns = self.metabolites.df.index)
     
     @property
     def __R_v_c(self) :
-        return np.dot(self.elasticity.s.to_numpy() , self.__R_s_c)
+        return np.dot(self.elasticity.s.df.to_numpy() , self.__R_s_c)
     @property
     def R_v_c(self) :
         return pd.DataFrame(self.__R_v_c, index = self.reactions.df.index, columns = self.metabolites.df.index)
@@ -242,7 +244,7 @@ class model:
         Nr = Nr.to_numpy()
 
         R_s_p = -np.dot(L, np.dot( np.linalg.solve(J , Nr) , self.elasticity.p.to_numpy()  ))
-        R_v_p =  np.dot(self.elasticity.s.to_numpy() , R_s_p) + self.elasticity.p.to_numpy()
+        R_v_p =  np.dot(self.elasticity.s.df.to_numpy() , R_s_p) + self.elasticity.p.to_numpy()
 
         return( np.block([[R_s_p ], 
                           [R_v_p ]   ])       )
@@ -335,28 +337,45 @@ class model:
     def _update_elasticity(self) :
         ### Description of the fonction
         """
-        Fonction to update the elasticities matrices of the model after a direct modification of the stoichiometric matrix
+        Function to update the elasticities matrices of the model after a direct modification of the stoichiometric matrix
         """
-    
-        for meta in self.Stoichio_matrix.index :
-            if meta not in self.elasticity.s.columns :
-                self.elasticity.s[meta] = [0 for i in self.elasticity.s.index]
+
+        for meta in self.metabolites.df.index :
+            if meta not in self.elasticity.s.df.columns :
+                self.elasticity.s.df[meta] = [0 for i in self.elasticity.s.df.index]
+                
         
         for para in self.parameters.df.index :
             if para not in self.elasticity.p.columns :
                 self.elasticity.p[para] = [0 for i in self.elasticity.p.index]
+                print(self.elasticity.p)
 
         # Pandas doesn't allow to add line before at least 1 column is add
         # So we don't add the reaction part until then
-        #if self.elasticity.s.columns.size != 0 :
-        for reaction in self.Stoichio_matrix.columns :
-            if reaction not in self.elasticity.s.index :
-                self.elasticity.s.loc[reaction] = [0 for i in self.elasticity.s.columns]
-    
-        for reaction in self.Stoichio_matrix.columns :
-            if reaction not in self.elasticity.p.index :
-                self.elasticity.p.loc[reaction] = [0 for i in self.elasticity.p.columns]
+        # And add it to a cache list
 
+        # First we add every reaction in a the cache (that are not already in)
+
+        for reaction in self.Stoichio_matrix.columns :
+            if reaction not in self.__cache_reactions_s :
+                self.__cache_reactions_s.append(reaction)
+            if reaction not in self.__cache_reactions_p :
+                self.__cache_reactions_p.append(reaction)
+        
+        #print(F"REACTION : {self.__cache_reactions_s}\n")
+        #print(self.elasticity.s.df.columns.size)
+
+        # Then, if the metabolite were added to the E_s matrix (as column), then we add the flux
+        if self.elasticity.s.df.columns.size != 0 :
+            for reaction in self.__cache_reactions_s :
+                if reaction not in self.elasticity.s.df.index :
+                    self.elasticity.s.df.loc[reaction] = [0 for i in self.elasticity.s.df.columns]
+
+
+        if self.elasticity.p.columns.size != 0 :
+            for reaction in self.__cache_reactions_p :
+                if reaction not in self.elasticity.p.index :
+                    self.elasticity.p.loc[reaction] = [0 for i in self.elasticity.p.columns]
 
 
     #################################################################################
@@ -515,7 +534,7 @@ class model:
         """
         self.parameters.df.reset_index(inplace=True)
         self.enzymes.df.reset_index(inplace=True)
-        self.elasticity.s.reset_index(inplace=True)
+        self.elasticity.s.df.reset_index(inplace=True)
         self.elasticity.p.reset_index(inplace=True)
         
 
@@ -840,14 +859,14 @@ class model:
                 # We attribute both elements of the list, the first must be the flux name and second the differential name's
                 flux, differential = name
                 # We check if the flux is in the model
-                if flux not in self.elasticity.s.index :
+                if flux not in self.elasticity.s.df.index :
                     raise NameError(f"The flux name \"{flux}\" is not in the elasticity matrix")
 
                 elif differential not in self.elasticity.s.columns : 
                     raise NameError(f"The differential name \"{differential}\" is not in the elasticity matrices E_s")
 
                 if type(mean) == bool :
-                    mean = self.elasticity.s.at[flux, differential]
+                    mean = self.elasticity.s.df.at[flux, differential]
 
         # Case where a parameter is sampled
         elif type_variable == "parameter" :
@@ -974,7 +993,7 @@ class model:
 
                 elif self.data_sampling.at[index, "Type"].lower() == "elasticity_s" :
                     flux, differential = self.data_sampling.at[index, "Name"]
-                    self.elasticity.s.at[flux, differential] = value_rand(self.data_sampling.at[index, "Distribution"], self.data_sampling.at[index, "Standard deviation"] , self.data_sampling.at[index, "Mean"] )
+                    self.elasticity.s.df.at[flux, differential] = value_rand(self.data_sampling.at[index, "Distribution"], self.data_sampling.at[index, "Standard deviation"] , self.data_sampling.at[index, "Mean"] )
 
                 elif self.data_sampling.at[index, "Type"].lower() == "parameter" :
                     self.parameters.df.at[self.data_sampling.at[index, "Name"], 'Mean values']               = value_rand(self.data_sampling.at[index, "Distribution"], self.data_sampling.at[index, "Standard deviation"] , self.data_sampling.at[index, "Mean"] )
@@ -1017,7 +1036,7 @@ class model:
         self.__original_atributes["metabolites"]      = copy.deepcopy(self.metabolites.df)
         self.__original_atributes["reactions"]        = copy.deepcopy(self.reactions.df)
         self.__original_atributes["parameters"]       = copy.deepcopy(self.parameters.df)
-        self.__original_atributes["elasticities_s"]   = copy.deepcopy(self.elasticity.s)
+        self.__original_atributes["elasticities_s"]   = copy.deepcopy(self.elasticity.s.df)
         self.__original_atributes["elasticities_p"]   = copy.deepcopy(self.elasticity.p)
         self.__original_atributes["enzymes"]          = copy.deepcopy(self.enzymes.df)
         
@@ -1028,7 +1047,7 @@ class model:
         self.metabolites.df  =   self.__original_atributes["metabolites"]
         self.reactions.df    =   self.__original_atributes["reactions"]
         self.parameters.df   =   self.__original_atributes["parameters"]
-        self.elasticity.s    =   self.__original_atributes["elasticities_s"]
+        self.elasticity.s.df    =   self.__original_atributes["elasticities_s"]
         self.elasticity.p    =   self.__original_atributes["elasticities_p"]
         self.enzymes.df      =   self.__original_atributes["enzymes"]
 

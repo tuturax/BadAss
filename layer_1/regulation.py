@@ -73,7 +73,7 @@ class Regulation_class:
     
 
         if allosteric == True :
-            self.__class_model_instance.elasticity.s.at[regulated, regulator] += coefficient
+            self.__class_model_instance.elasticity.s.df.at[regulated, regulator] += coefficient
 
         else :
             # name of the enzyme linked to this regulation
@@ -83,7 +83,7 @@ class Regulation_class:
             self.__class_model_instance.metabolites.add(name = enzyme)
             self.__class_model_instance.reactions.add(name = "creation_" + name    , metabolites = {enzyme :  1})
             self.__class_model_instance.reactions.add(name = "destruction_" + name , metabolites = {enzyme : -1})
-            self.__class_model_instance.elasticity.s.at["creation_" + name, regulator] += coefficient
+            self.__class_model_instance.elasticity.s.df.at["creation_" + name, regulator] += coefficient
 
 
             

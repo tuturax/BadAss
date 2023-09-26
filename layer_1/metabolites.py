@@ -23,7 +23,7 @@ class Metabolite_class:
         self.__class_model_instance = class_model_instance
 
         # Private list to deal with the fact that a dataframe cannot be filled if there is no collumn in the dataframe
-        self.__list_meta = []
+        self.__cache_meta = []
 
         self.df = pd.DataFrame(columns= ['External', 'Concentration (mmol/gDW)'])
 
@@ -65,16 +65,16 @@ class Metabolite_class:
 
             # If there is no reaction in the columns of the soichio metric matrix, we keep in memeory the metabolite
             if self.__class_model_instance.Stoichio_matrix.columns.size == 0 :
-                self.__list_meta.append(name) 
+                self.__cache_meta.append(name) 
                 print("Don't worry, the metabolite will be add after the add of the 1st reaction")
 
             # Else, we add every metabolite that we keeped into memory to the stoichiometrix matrix
             else : 
-                self.__list_meta.append(name)
-                for meta in self.__list_meta :
+                self.__cache_meta.append(name)
+                for meta in self.__cache_meta :
                     if meta not in self.__class_model_instance.Stoichio_matrix.index :
                         self.__class_model_instance.Stoichio_matrix.loc[meta] = [0 for i in range(self.__class_model_instance.Stoichio_matrix.shape[1])]
-                self.__list_meta = []
+                self.__cache_meta = []
 
             # Updating the network
             #self.__class_model_instance._update_network(session = "meta")
@@ -118,7 +118,7 @@ class Metabolite_class:
             self.__class_model_instance._update_network
 
             # Remove this metabolite from the elasticity matrix E_s
-            self.__class_model_instance.elasticity.s.drop(name, axis = 1, inplace = True)
+            self.__class_model_instance.elasticity.s.df.drop(name, axis = 1, inplace = True)
 
 
 
