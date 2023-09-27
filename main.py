@@ -164,16 +164,18 @@ class model:
                 else :
                     Dependent_rows.append(index_start + i)
             
+            if Nr.shape[0] <= 1 or Nr.shape[1]<=1 :
+                raise IndexError(f"1-dimensional array given for inversion. Array must be at least two-dimensional")
             
-            L = np.round(np.dot(N, np.linalg.pinv(Nr)), 12)
+            else :
+                
+                L = np.round(np.dot(N, np.linalg.pinv(Nr)), 12)
 
-            Nr = pd.DataFrame( columns=N_df.columns )
-            
-            for i, metabolite in enumerate(N_df.index) :
-                if i in Independent_rows :
-                    Nr.loc[metabolite] = N_df.loc[metabolite]
-
-
+                Nr = pd.DataFrame( columns=N_df.columns )
+                
+                for i, metabolite in enumerate(N_df.index) :
+                    if i in Independent_rows :
+                        Nr.loc[metabolite] = N_df.loc[metabolite]
 
             return(L, Nr)
         
@@ -190,7 +192,7 @@ class model:
     # Jacobian
     @property
     def __Jacobian(self) :
-        L, Nr = self.Shorts
+        L, Nr = self.Link_matrix()
         J = np.dot( Nr.to_numpy(), np.dot(self.elasticity.s.df.to_numpy(), L))
         return J
     @property
@@ -343,6 +345,8 @@ class model:
         for meta in self.metabolites.df.index :
             if meta not in self.elasticity.s.df.columns :
                 self.elasticity.s.df[meta] = [0 for i in self.elasticity.s.df.index]
+
+
                 
         
         for para in self.parameters.df.index :
@@ -357,25 +361,17 @@ class model:
         # First we add every reaction in a the cache (that are not already in)
 
         for reaction in self.Stoichio_matrix.columns :
-            if reaction not in self.__cache_reactions_s :
-                self.__cache_reactions_s.append(reaction)
-            if reaction not in self.__cache_reactions_p :
-                self.__cache_reactions_p.append(reaction)
-        
-        #print(F"REACTION : {self.__cache_reactions_s}\n")
-        #print(self.elasticity.s.df.columns.size)
+            if reaction not in self.elasticity.s.df.index :
+                self.elasticity.s.df.loc[reaction] = [0 for i in self.elasticity.s.df.columns]  
 
-        # Then, if the metabolite were added to the E_s matrix (as column), then we add the flux
-        if self.elasticity.s.df.columns.size != 0 :
-            for reaction in self.__cache_reactions_s :
-                if reaction not in self.elasticity.s.df.index :
-                    self.elasticity.s.df.loc[reaction] = [0 for i in self.elasticity.s.df.columns]
+            if reaction not in self.elasticity.p.index :
+                self.elasticity.p.loc[reaction] = [0 for i in self.elasticity.p.columns]
 
-
-        if self.elasticity.p.columns.size != 0 :
-            for reaction in self.__cache_reactions_p :
-                if reaction not in self.elasticity.p.index :
-                    self.elasticity.p.loc[reaction] = [0 for i in self.elasticity.p.columns]
+        colonnes = self.elasticity.s.df.columns
+        index = self.elasticity.s.df.index
+        self.elasticity.s.thermo = pd.DataFrame(0, columns=colonnes, index=index)
+        self.elasticity.s.enzyme = pd.DataFrame(0, columns=colonnes, index=index)
+        self.elasticity.s.regulation = pd.DataFrame(0, columns=colonnes, index=index)
 
 
     #################################################################################
