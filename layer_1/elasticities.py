@@ -21,7 +21,7 @@ class Elasticity_class:
         # Private attribute for the instance of the Main class
         self.__class_model_instance = class_model_instance
 
-        self.__s = Sub_Elasticity_class(class_model_instance)
+        self.s = Sub_Elasticity_class(class_model_instance)
         self.__p = pd.DataFrame()
 
     #################################################################################
@@ -37,11 +37,12 @@ class Elasticity_class:
 
     #################################################################################
     #########        Setter to change the elasticities matrix              ##########
+    """    
     # For the E_s matrix
     @property
     def s(self) :
-        return self.__s    
-    
+        return self.__s    """
+
 
     # For the E_p matrix
     @property
