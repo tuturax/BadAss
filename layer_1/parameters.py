@@ -78,6 +78,7 @@ class Parameter_class:
                 self.__class_model_instance.elasticity.p.drop(
                     name, axis=1, inplace=True
                 )
+            self.__class_model_instance._update_elasticity()
 
     ##################################################################################
     #########         Fonction to add all enzyme to the model               ##########

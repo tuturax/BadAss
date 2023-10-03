@@ -216,7 +216,7 @@ class model:
         if self.__cache_Jacobian is not None:
             return self.__cache_Jacobian
         else:
-            # Reset of the value of the inversed matrix of J
+            # Reset of the cache value of the inversed matrix of J
             self.__cache_Reversed_Jacobian = None
             # Compute the J matrix
             L, Nr = self.Link_matrix
@@ -242,7 +242,6 @@ class model:
             self.__cache_R_v_p = None
             self.__cache_R_s_c = None
             self.__cache_R_v_p = None
-
             # Compute the J-1 matrix
             self.__cache_Reversed_Jacobian = np.linalg.inv(self.__Jacobian)
             return self.__cache_Reversed_Jacobian
@@ -269,10 +268,9 @@ class model:
                     np.dot(self.Link_matrix[1], self.elasticity.p.to_numpy()),
                 ),
             )
-
             return self.__cache_R_s_p
 
-    @property  # Displayeed
+    @property  # Displayed
     def R_s_p(self):
         return pd.DataFrame(
             self.__R_s_p,
@@ -341,9 +339,6 @@ class model:
     @property  # Core
     def __R(self):
         return np.block([[self.__R_s_p], [self.__R_v_p]])
-
-    def print(self):
-        print(self.__R)
 
     @property  # Displayed
     def R(self):
@@ -479,6 +474,13 @@ class model:
 
         # Reset the value of the cache data
         self.__cache_Jacobian = None
+        self.__cache_Reversed_Jacobian = None
+
+        # Reset of the cache value of the MCA coeff
+        self.__cache_R_s_p = None
+        self.__cache_R_v_p = None
+        self.__cache_R_s_c = None
+        self.__cache_R_v_p = None
 
     #################################################################################
     ############     Function that return the correlation coefficient    ############
@@ -529,7 +531,7 @@ class model:
                 for j in range(Cov.shape[1]):
                     denominator = Cov[i][i] * Cov[j][j] - Cov[i][j] * Cov[j][i]
                     if denominator == 0:
-                        MI[i][j] = 0
+                        MI[i][j] = np.inf
                     else:
                         MI[i][j] = (1 / (2 * np.log(2))) * np.log(
                             Cov[i][i] * Cov[j][j] / denominator
@@ -577,6 +579,28 @@ class model:
         # Line to retablish the warning
         np.seterr(divide="warn", invalid="warn")
 
+        return MI
+
+    #################################################################################
+    ############    Function that return the Mutual Inforamtion matrix   ############
+    def objective(self, variable1: str, variable2: str):
+        ### Description of the fonction
+        """
+        Fonction to compute the Mutual information bteween to variable
+
+        variable1, variable2 : string of the name of the variable that we want to compute the mutual information
+
+        """
+        Cov_df = self.covariance
+
+        MI = (1 / (2 * np.log(2))) * np.log(
+            Cov_df.at[variable1, variable1]
+            * Cov_df.at[variable2, variable2]
+            / (
+                Cov_df.at[variable1, variable1] * Cov_df.at[variable2, variable2]
+                - Cov_df.at[variable1, variable2] * Cov_df.at[variable2, variable1]
+            )
+        )
         return MI
 
     #############################################################################
