@@ -52,9 +52,18 @@ class model:
         print(
             "Model created \n \nTo add metabolite, use .metabolites.add_meta \nTo add reaction,   use .reactions.add_reaction"
         )
-
+        # Cache of the Network
         self.__cache_Link_matrix = None
         self.__cache_Reduced_Stoichio_matrix = None
+        # Cache of the dynamic proprites
+        self.__cache_Jacobian = None
+        self.__cache_Reversed_Jacobian = None
+
+        # Cache of MCA coefficients
+        self.__cache_R_s_p = None
+        self.__cache_R_v_p = None
+        self.__cache_R_s_c = None
+        self.__cache_R_v_p = None
 
     #################################################################################
     ######    Representation = the Dataframe of the Stoichiometric matrix     #######
@@ -98,7 +107,11 @@ class model:
     @property
     def Link_matrix(self):
         # If the value isn't None, return the cache value
-        if self.__cache_Link_matrix is not None:
+        if self.__cache_Link_matrix is not None and (
+            self.__cache_Link_matrix.shape[0] != self.__Stoichio_matrix.shape[0]
+            or self.__cache_Reduced_Stoichio_matrix.shape[1]
+            != self.__Stoichio_matrix.shape[1]
+        ):
             return (self.__cache_Link_matrix, self.__cache_Reduced_Stoichio_matrix)
 
         def is_independent(Nr, new_row):
@@ -196,38 +209,70 @@ class model:
 
     # MCA properties
 
+    ###################
     # Jacobian
-    @property
+    @property  # Core
     def __Jacobian(self):
-        L, Nr = self.Link_matrix
-        J = np.dot(Nr.to_numpy(), np.dot(self.elasticity.s.df.to_numpy(), L))
-        return J
+        if self.__cache_Jacobian is not None:
+            return self.__cache_Jacobian
+        else:
+            # Reset of the value of the inversed matrix of J
+            self.__cache_Reversed_Jacobian = None
+            # Compute the J matrix
+            L, Nr = self.Link_matrix
+            self.__cache_Jacobian = np.dot(
+                Nr.to_numpy(), np.dot(self.elasticity.s.df.to_numpy(), L)
+            )
+            return self.__cache_Jacobian
 
-    @property
+    @property  # Displayed
     def Jacobian(self):
         Nr = self.Link_matrix[1]
         return pd.DataFrame(self.__Jacobian, index=Nr.index, columns=Nr.index)
 
+    #########################
     # Inverse of the Jacobian
-    @property
+    @property  # Core
     def __Jacobian_reversed(self):
-        return np.linalg.inv(self.__Jacobian)
+        if self.__cache_Reversed_Jacobian is not None:
+            return self.__cache_Reversed_Jacobian
+        else:
+            # Reset of the cache value of the MCA coeff
+            self.__cache_R_s_p = None
+            self.__cache_R_v_p = None
+            self.__cache_R_s_c = None
+            self.__cache_R_v_p = None
 
-    @property
+            # Compute the J-1 matrix
+            self.__cache_Reversed_Jacobian = np.linalg.inv(self.__Jacobian)
+            return self.__cache_Reversed_Jacobian
+
+    @property  # Displayed
     def Jacobian_reversed(self):
         J_df = self.Jacobian
         J_inv = np.linalg.inv(J_df.to_numpy())
         return pd.DataFrame(J_inv, index=J_df.index, columns=J_df.columns)
 
-    # Response coefficient of the metabolite
-    @property
-    def __R_s_p(self):
-        return -np.dot(
-            self.__Jacobian_reversed,
-            np.dot(self.__Stoichio_matrix, self.elasticity.p.to_numpy()),
-        )
+    ########################################
+    # Response coefficient of the metabolite : MCA
 
-    @property
+    # R_s_p
+    @property  # Core
+    def __R_s_p(self):
+        if self.__cache_R_s_p is not None:
+            return self.__cache_R_s_p
+        else:
+            self.__cache_R_s_p = -np.dot(
+                self.Link_matrix[0],
+                np.dot(
+                    self.__Jacobian_reversed,
+                    np.dot(self.Link_matrix[1], self.elasticity.p.to_numpy()),
+                ),
+            )
+
+            return self.__cache_R_s_p
+
+    @property  # Displayeed
     def R_s_p(self):
         return pd.DataFrame(
             self.__R_s_p,
@@ -235,14 +280,19 @@ class model:
             columns=self.parameters.df.index,
         )
 
-    @property
+    # R_v_p
+    @property  # Core
     def __R_v_p(self):
-        return (
-            np.dot(self.elasticity.s.df.to_numpy(), self.__R_s_p)
-            + self.elasticity.p.to_numpy()
-        )
+        if self.__cache_R_v_p is not None:
+            return self.__cache_R_v_p
+        else:
+            self.__cache_R_v_p = (
+                np.dot(self.elasticity.s.df.to_numpy(), self.__R_s_p)
+                + self.elasticity.p.to_numpy()
+            )
+            return self.__cache_R_v_p
 
-    @property
+    @property  # Displayed
     def R_v_p(self):
         return pd.DataFrame(
             self.__R_v_p,
@@ -250,14 +300,19 @@ class model:
             columns=self.parameters.df.index,
         )
 
-    @property
+    # R_s_c
+    @property  # Core
     def __R_s_c(self):
-        return -np.dot(
-            self.Jacobian_reversed,
-            np.dot(self.__Stoichio_matrix, self.elasticity.s.df.to_numpy()),
-        ) + np.identity(len(self.__Stoichio_matrix))
+        if self.__cache_R_s_c is not None:
+            return self.__cache_R_s_c
+        else:
+            self.__cache_R_s_c = -np.dot(
+                self.Jacobian_reversed,
+                np.dot(self.__Stoichio_matrix, self.elasticity.s.df.to_numpy()),
+            ) + np.identity(len(self.__Stoichio_matrix))
+            return self.__cache_R_s_c
 
-    @property
+    @property  # Displayed
     def R_s_c(self):
         return pd.DataFrame(
             self.__R_s_c,
@@ -265,11 +320,16 @@ class model:
             columns=self.metabolites.df.index,
         )
 
-    @property
+    # R_v_c
+    @property  # Core
     def __R_v_c(self):
-        return np.dot(self.elasticity.s.df.to_numpy(), self.__R_s_c)
+        if self.__cache_R_v_c is not None:
+            return self.__cache_R_v_c
+        else:
+            self.__cache_R_v_c = np.dot(self.elasticity.s.df.to_numpy(), self.__R_s_c)
+            return self.__cache_R_v_c
 
-    @property
+    @property  # Displayed
     def R_v_c(self):
         return pd.DataFrame(
             self.__R_v_c,
@@ -277,23 +337,16 @@ class model:
             columns=self.metabolites.df.index,
         )
 
-    @property
+    # Big matrix of response R
+    @property  # Core
     def __R(self):
-        J = self.__Jacobian
-        L, Nr = self.Link_matrix
-        Nr = Nr.to_numpy()
+        return np.block([[self.__R_s_p], [self.__R_v_p]])
 
-        R_s_p = -np.dot(L, np.dot(np.linalg.solve(J, Nr), self.elasticity.p.to_numpy()))
-        R_v_p = (
-            np.dot(self.elasticity.s.df.to_numpy(), R_s_p)
-            + self.elasticity.p.to_numpy()
-        )
+    def print(self):
+        print(self.__R)
 
-        return np.block([[R_s_p], [R_v_p]])
-
-    @property
+    @property  # Displayed
     def R(self):
-        print(self.__R.shape)
         return pd.DataFrame(
             self.__R,
             index=self.metabolites.df.index.to_list()
@@ -348,9 +401,6 @@ class model:
         self._Stoichio_matrix = new_df
         self._update_network()
 
-        # Update of the link matrix
-        self.__cache_Link_matrix = None
-
     def _update_network(self, session="Matrix") -> None:
         ### Description of the fonction
         """
@@ -380,6 +430,11 @@ class model:
 
         for meta in self.Stoichio_matrix.index:
             self.metabolites._update(meta)
+
+        # Reset the value of the cache data
+        self.__cache_Link_matrix = None
+        self.__cache_Reduced_Stoichio_matrix = None
+        self.__cache_Jacobian = None
 
         # We update the elasticities matrix based on the new stoichiometric matrix
         self._update_elasticity()
@@ -421,6 +476,9 @@ class model:
         self.elasticity.s.thermo = pd.DataFrame(0, columns=colonnes, index=index)
         self.elasticity.s.enzyme = pd.DataFrame(0, columns=colonnes, index=index)
         self.elasticity.s.regulation = pd.DataFrame(0, columns=colonnes, index=index)
+
+        # Reset the value of the cache data
+        self.__cache_Jacobian = None
 
     #################################################################################
     ############     Function that return the correlation coefficient    ############
