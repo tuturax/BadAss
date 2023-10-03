@@ -51,6 +51,7 @@ class Parameter_class:
         # Else, the parameter is add to the model by an add to the DataFrame
         else:
             self.df.loc[name] = [mean, Standard_deviation]
+            self.__class_model_instance._reset_value("E_p")
 
     ##################################################################################
     #########           Fonction to remove a parameter                      ##########
@@ -74,11 +75,11 @@ class Parameter_class:
             print(f"Name of the removed parameter : {name}")
 
             # Removing this parameter from the elasticity matrix E_p
-            if name in self.__class_model_instance.elasticity.p.columns:
-                self.__class_model_instance.elasticity.p.drop(
+            if name in self.__class_model_instance.elasticity.p.df.columns:
+                self.__class_model_instance.elasticity.p.df.drop(
                     name, axis=1, inplace=True
                 )
-            self.__class_model_instance._update_elasticity()
+                self.__class_model_instance._reset_value("E_p")
 
     ##################################################################################
     #########         Fonction to add all enzyme to the model               ##########
@@ -91,7 +92,7 @@ class Parameter_class:
         # For every enzymes of the models
         for enzyme in self.__class_model_instance.enzymes.df.index:
             # if this one is not already considered as a parameter
-            if enzyme + "_para" not in self.df.index:
+            if (enzyme + "_para") not in self.df.index:
                 # We add it in the parameter
                 self.add(
                     enzyme + "_para",
@@ -100,18 +101,25 @@ class Parameter_class:
                     ],
                 )
                 # We add a new column of 0 to the parameters elasticity dataframe
-                self.__class_model_instance.elasticity.p[enzyme + "_para"] = [
-                    0.0
-                    for i in range(self.__class_model_instance.elasticity.p.shape[0])
-                ]
+                self.__class_model_instance.elasticity.p.df[enzyme + "_para"] = 0.0
 
-                # We add 1 to the enzyme linked to reaction
-                for reaction in self.__class_model_instance.enzymes.df.loc[
-                    enzyme, "Reactions linked"
-                ]:
-                    self.__class_model_instance.elasticity.p.loc[
-                        reaction, enzyme + "_para"
-                    ] = 1.0
+        # For every reaction of the N matrix
+        for reaction in self.__class_model_instance.Stoichio_matrix.columns:
+            # if the reaction is not in the Dataframe, we add it
+            if reaction not in self.__class_model_instance.elasticity.p.df.index:
+                self.__class_model_instance.elasticity.p.df.loc[reaction] = 0.0
+
+        # For every enzymes of the models
+        for enzyme in self.__class_model_instance.enzymes.df.index:
+            # We add 1 to the enzyme linked to reaction
+            for reaction in self.__class_model_instance.enzymes.df.loc[
+                enzyme, "Reactions linked"
+            ]:
+                self.__class_model_instance.elasticity.p.df.loc[
+                    reaction, enzyme + "_para"
+                ] = 1.0
+
+        self.__class_model_instance._reset_value("E_p")
 
     ##################################################################################
     #########         Fonction to add all external metabolite               ##########
@@ -120,7 +128,6 @@ class Parameter_class:
         """
         Fonction to consider all external metabolite as parameters
         """
-
         # For every metabolite of the model
         for meta in self.__class_model_instance.metabolites.df.index:
             # If this one is external
@@ -129,26 +136,30 @@ class Parameter_class:
                 if (meta + "_para") not in self.df.index:
                     # We add it to the parameter dataframe
                     self.add(meta + "_para")
-                    # And add a column to the parameter elasticity matrix
-                    self.__class_model_instance.elasticity.p[meta + "_para"] = [
-                        0
-                        for i in range(
-                            self.__class_model_instance.elasticity.p.shape[0]
-                        )
-                    ]
+                # And add a column to the parameter elasticity matrix
+                if (
+                    meta + "_para"
+                ) not in self.__class_model_instance.elasticity.p.df.columns:
+                    self.__class_model_instance.elasticity.p.df[meta + "_para"] = 0.0
 
-                    for reaction in self.__class_model_instance.Stoichio_matrix.columns:
-                        if (
-                            self.__class_model_instance.Stoichio_matrix.loc[
-                                meta, reaction
-                            ]
-                            != 0
-                        ):
-                            self.__class_model_instance.elasticity.p.loc[
-                                reaction, meta + "_para"
-                            ] = (
-                                -0.5
-                                * self.__class_model_instance.Stoichio_matrix.loc[
-                                    meta, reaction
-                                ]
-                            )
+        # For every reaction of the N matrix
+        for reaction in self.__class_model_instance.Stoichio_matrix.columns:
+            # if the reaction is not in the Dataframe, we add it
+            if reaction not in self.__class_model_instance.elasticity.p.df.index:
+                self.__class_model_instance.elasticity.p.df.loc[reaction] = 0.0
+
+            # Then we for each metabolite
+            for meta in self.__class_model_instance.Stoichio_matrix.index:
+                # We check if this one is external
+                if self.__class_model_instance.metabolites.df.loc[meta, "External"]:
+                    # Then we attribute a special value to its elasticity
+                    self.__class_model_instance.elasticity.p.df.loc[
+                        reaction, meta + "_para"
+                    ] = (
+                        -0.5
+                        * self.__class_model_instance.Stoichio_matrix.loc[
+                            meta, reaction
+                        ]
+                    )
+
+        self.__class_model_instance._reset_value("E_p")

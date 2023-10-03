@@ -36,19 +36,15 @@ class Sub_Elasticity_class:
     # For the E_s matrix
     @property
     def df(self):
-        non_null = False
-        for index in self.thermo.index:
-            for column in self.thermo.columns:
-                if (
-                    self.thermo.at[index, column] != 0
-                    or self.enzyme.at[index, column] != 0
-                    or self.regulation.at[index, column] != 0
-                ):
-                    non_null = True
-        if non_null:
+        if (
+            self.thermo.eq(0).all().all()
+            and self.enzyme.eq(0).all().all()
+            and self.regulation.eq(0).all().all()
+        ):
+            return self._df
+        else:
             self._df = self.thermo - self.enzyme + self.regulation
-
-        return self._df
+            return self._df
 
     @df.setter
     def df(self, matrix):
@@ -59,9 +55,11 @@ class Sub_Elasticity_class:
                 )
             else:
                 self._df.values[:] = matrix
+                self.__class_model_instance._reset_value(session="E_s")
 
         elif type(matrix) == type(pd.DataFrame()):
             self._df = matrix
+            self.__class_model_instance._reset_value(session="E_s")
 
         else:
             raise TypeError(
@@ -82,6 +80,8 @@ class Sub_Elasticity_class:
 
         # Reset of the main elasticity dataframe
         self.df.fillna(0, inplace=True)
+        # Reset of the value of the system
+        self.__class_model_instance._reset_value(session="E_s")
 
     #################################################################################
     #########     Fonction to update the elasticities matrix               ##########
@@ -92,6 +92,19 @@ class Sub_Elasticity_class:
         """
         self.reset()
         self._df = -0.5 * self.__class_model_instance.Stoichio_matrix.transpose()
+
+    #################################################################################
+    #########        Fonction to change a coefficient of the matrix        ##########
+    def change(self, flux_name: str, metabolite_name: str, value: float):
+        if flux_name not in self.df.index:
+            raise NameError(f"The flux name '{flux_name}' is not in the model")
+        elif metabolite_name not in self.df.columns:
+            raise NameError(
+                f"The parameter name '{metabolite_name}' is not in the model"
+            )
+        else:
+            self.df.at[flux_name, metabolite_name] = value
+            self.__class_model_instance._reset_value(session="E_s")
 
     #################################################################################
     #########     Fonction to update the elasticities matrix               ##########

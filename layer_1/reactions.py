@@ -122,10 +122,6 @@ class Reaction_class:
             # Updating the network
             self.__class_model_instance._update_network
 
-            # Remove this metabolite from the elasticity matrix E_s
-            self.__class_model_instance.elasticity.s.df.drop(name, axis=0, inplace=True)
-            self.__class_model_instance.elasticity.p.drop(name, axis=0, inplace=True)
-
     #################################################################################
     #########           Fonction to add a reaction                         ##########
     def _update(self, name: str, metabolites={}, k_eq=1.0, law="", flux=1) -> None:

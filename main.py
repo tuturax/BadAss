@@ -265,7 +265,7 @@ class model:
                 self.Link_matrix[0],
                 np.dot(
                     self.__Jacobian_reversed,
-                    np.dot(self.Link_matrix[1], self.elasticity.p.to_numpy()),
+                    np.dot(self.Link_matrix[1], self.elasticity.p.df.to_numpy()),
                 ),
             )
             return self.__cache_R_s_p
@@ -286,7 +286,7 @@ class model:
         else:
             self.__cache_R_v_p = (
                 np.dot(self.elasticity.s.df.to_numpy(), self.__R_s_p)
-                + self.elasticity.p.to_numpy()
+                + self.elasticity.p.df.to_numpy()
             )
             return self.__cache_R_v_p
 
@@ -388,6 +388,34 @@ class model:
         )
 
     #############################################################################
+    #############   Function reset some the values of the model  ################
+    def _reset_value(self, session=""):
+        if session.lower() == "e_s":
+            # Reset the value of the cache data
+            self.__cache_Jacobian = None
+            self.__cache_Reversed_Jacobian = None
+
+        elif session.lower() == "e_p":
+            # Reset the value of the cache data
+            self.__cache_Jacobian = None
+            self.__cache_Reversed_Jacobian = None
+            # Reset of the cache value of the MCA coeff
+            self.__cache_R_s_p = None
+            self.__cache_R_v_p = None
+            self.__cache_R_s_c = None
+            self.__cache_R_v_p = None
+
+        else:
+            # Reset the value of the cache data
+            self.__cache_Jacobian = None
+            self.__cache_Reversed_Jacobian = None
+            # Reset of the cache value of the MCA coeff
+            self.__cache_R_s_p = None
+            self.__cache_R_v_p = None
+            self.__cache_R_s_c = None
+            self.__cache_R_v_p = None
+
+    #############################################################################
     #############   Function to update after a modification of N  ###############
 
     # Call the update function when the matrix_Stoichio is modified
@@ -437,7 +465,7 @@ class model:
     #################################################################################
     ############     Function to the elaticities matrix of the model     ############
 
-    def _update_elasticity(self):
+    def _update_elasticity(self, session="E_s"):
         ### Description of the fonction
         """
         Function to update the elasticities matrices of the model after a direct modification of the stoichiometric matrix
@@ -445,42 +473,41 @@ class model:
         # First we add the metabolite (=column) to the E_s datafrmae
         # We define a fixed variable n_reaction because elasticity.s.df depend of the sub_elasticity
         n_reaction = len(self.elasticity.s.df.index)
-        for meta in self.metabolites.df.index:
-            if meta not in self.elasticity.s.df.columns:
-                self.elasticity.s.df[meta] = [0 for i in range(n_reaction)]
 
-        for para in self.parameters.df.index:
-            if para not in self.elasticity.p.columns:
-                self.elasticity.p[para] = [0 for i in self.elasticity.p.index]
+        if session.lower() == "e_s":
+            for meta in self.metabolites.df.index:
+                if meta not in self.elasticity.s.df.columns:
+                    self.elasticity.s.df[meta] = [0 for i in range(n_reaction)]
+            # Pandas doesn't allow to add line before at least 1 column is add
+            if self.elasticity.s.df.columns.size != 0:
+                for reaction in self.reactions.df.index:
+                    if reaction not in self.elasticity.s.df.index:
+                        self.elasticity.s.df.loc[reaction] = [
+                            0 for i in self.elasticity.s.df.columns
+                        ]
 
-        # Pandas doesn't allow to add line before at least 1 column is add
-        if self.elasticity.s.df.columns.size != 0:
-            for reaction in self.reactions.df.index:
-                if reaction not in self.elasticity.s.df.index:
-                    self.elasticity.s.df.loc[reaction] = [
-                        0 for i in self.elasticity.s.df.columns
-                    ]
+            colonnes = self.elasticity.s.df.columns
+            index = self.elasticity.s.df.index
+            self.elasticity.s.thermo = pd.DataFrame(0, columns=colonnes, index=index)
+            self.elasticity.s.enzyme = pd.DataFrame(0, columns=colonnes, index=index)
+            self.elasticity.s.regulation = pd.DataFrame(
+                0, columns=colonnes, index=index
+            )
 
-                if reaction not in self.elasticity.p.index:
-                    self.elasticity.p.loc[reaction] = [
-                        0 for i in self.elasticity.p.columns
-                    ]
+        elif session.lower() == "e_p":
+            for para in self.parameters.df.index:
+                if para not in self.elasticity.p.df.columns:
+                    self.elasticity.p.df[para] = [0 for i in self.elasticity.p.df.index]
 
-        colonnes = self.elasticity.s.df.columns
-        index = self.elasticity.s.df.index
-        self.elasticity.s.thermo = pd.DataFrame(0, columns=colonnes, index=index)
-        self.elasticity.s.enzyme = pd.DataFrame(0, columns=colonnes, index=index)
-        self.elasticity.s.regulation = pd.DataFrame(0, columns=colonnes, index=index)
+            # Pandas doesn't allow to add line before at least 1 column is add
+            if self.elasticity.p.df.columns.size != 0:
+                for reaction in self.reactions.df.index:
+                    if reaction not in self.elasticity.p.df.index:
+                        self.elasticity.p.df.loc[reaction] = [
+                            0 for i in self.elasticity.p.df.columns
+                        ]
 
-        # Reset the value of the cache data
-        self.__cache_Jacobian = None
-        self.__cache_Reversed_Jacobian = None
-
-        # Reset of the cache value of the MCA coeff
-        self.__cache_R_s_p = None
-        self.__cache_R_v_p = None
-        self.__cache_R_s_c = None
-        self.__cache_R_v_p = None
+        self._reset_value()
 
     #################################################################################
     ############     Function that return the correlation coefficient    ############
@@ -653,7 +680,7 @@ class model:
         self.parameters.df.reset_index(inplace=True)
         self.enzymes.df.reset_index(inplace=True)
         self.elasticity.s.df.reset_index(inplace=True)
-        self.elasticity.p.reset_index(inplace=True)
+        self.elasticity.p.df.reset_index(inplace=True)
 
         df = pd.read_excel(file)
         N = df.drop(df.columns[0], axis=1)
@@ -888,18 +915,21 @@ class model:
             custom_map = matplotlib.colors.LinearSegmentedColormap.from_list(
                 "custom", ["white", "blue"]
             )
+
             im = plt.imshow(matrix, cmap=custom_map, norm=matplotlib.colors.LogNorm())
 
         elif result == "rho":
             custom_map = matplotlib.colors.LinearSegmentedColormap.from_list(
                 "custom", ["red", "white", "blue"]
             )
+
             im = plt.imshow(matrix, cmap=custom_map, vmin=-1, vmax=1)
 
         elif result == "cov":
             custom_map = matplotlib.colors.LinearSegmentedColormap.from_list(
                 "custom", ["white", "blue"]
             )
+
             im = plt.imshow(matrix, cmap=custom_map)
 
         # Display the label next to the axis
@@ -987,18 +1017,18 @@ class model:
                 # We attribute both elements of the list, the first must be the flux name and second the differential name's
                 flux, differential = name
                 # We check if the flux is in the model
-                if flux not in self.elasticity.p.index:
+                if flux not in self.elasticity.p.df.index:
                     raise NameError(
                         f'The flux name "{flux}" is not in the elasticity matrix'
                     )
 
-                elif differential not in self.elasticity.p.columns:
+                elif differential not in self.elasticity.p.df.columns:
                     raise NameError(
                         f'The differential name "{differential}" is not in the elasticity matrices E_p'
                     )
 
                 if type(mean) == bool:
-                    mean = self.elasticity.p.at[flux, differential]
+                    mean = self.elasticity.p.df.at[flux, differential]
 
         # Case where the elasticity s is sampled
         elif type_variable == "elasticity_s":
@@ -1161,7 +1191,7 @@ class model:
 
                 if self.data_sampling.at[index, "Type"].lower() == "elasticity_p":
                     flux, differential = self.data_sampling.at[index, "Name"]
-                    self.elasticity.p.at[flux, differential] = value_rand(
+                    self.elasticity.p.df.at[flux, differential] = value_rand(
                         self.data_sampling.at[index, "Distribution"],
                         self.data_sampling.at[index, "Standard deviation"],
                         self.data_sampling.at[index, "Mean"],
@@ -1222,7 +1252,7 @@ class model:
 
         running_time = time.time() - start
         print(
-            f"running tiem of the code : {running_time} \nSo {running_time/N} per occurences !"
+            f"running time of the code : {running_time} \nSo {running_time/N} per occurences !"
         )
         return matrix_sampled
 
@@ -1239,9 +1269,11 @@ class model:
         self.__original_atributes["reactions"] = copy.deepcopy(self.reactions.df)
         self.__original_atributes["parameters"] = copy.deepcopy(self.parameters.df)
         self.__original_atributes["elasticities_s"] = copy.deepcopy(
-            self.elasticity.s.df
+            self.elasticity.s._df
         )
-        self.__original_atributes["elasticities_p"] = copy.deepcopy(self.elasticity.p)
+        self.__original_atributes["elasticities_p"] = copy.deepcopy(
+            self.elasticity.p._df
+        )
         self.__original_atributes["enzymes"] = copy.deepcopy(self.enzymes.df)
 
     #############################################################################
@@ -1251,8 +1283,8 @@ class model:
         self.metabolites.df = self.__original_atributes["metabolites"]
         self.reactions.df = self.__original_atributes["reactions"]
         self.parameters.df = self.__original_atributes["parameters"]
-        self.elasticity.s.df = self.__original_atributes["elasticities_s"]
-        self.elasticity.p = self.__original_atributes["elasticities_p"]
+        self.elasticity.s._df = self.__original_atributes["elasticities_s"]
+        self.elasticity.p._df = self.__original_atributes["elasticities_p"]
         self.enzymes.df = self.__original_atributes["enzymes"]
 
     #############################################################################
