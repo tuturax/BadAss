@@ -114,93 +114,61 @@ class model:
         ):
             return (self.__cache_Link_matrix, self.__cache_Reduced_Stoichio_matrix)
 
-        def is_independent(Nr, new_row):
-            # Creation of a matrix of linearly independant row + the line to analyse
-            Nr_test = np.block([[Nr], [new_row]])
-            # Call of the Reduced Row-Echelon Form (.rref)
-            echelon_matrix, Independent_row = sympy.Matrix(
-                np.transpose(Nr_test)
-            ).T.rref()
-            # If the last line of the the reduced echelon form of the new matrix is null => the new row is non independent
-            for element in echelon_matrix[-1, :]:
-                if element != 0:
-                    return True
-            return False
+        # Else we take a look to the dependent row of the stoichio matrix
+        dependent_row = []
+        # First we remove the external metabolite
+        for i, meta in enumerate(self.Stoichio_matrix.index):
+            if self.metabolites.df.at[meta, "External"] == True:
+                dependent_row.append(i)
 
-        def link_matrix(N_df):
-            N = N_df.to_numpy()
+        # If the first row is not external, we add it
+        if dependent_row[0] != 0:
+            N_without_ext = np.array([self.Stoichio_matrix.to_numpy()[0]])
+        # Else, we add a row of 0
+        else:
+            N_without_ext = np.array([0 for i in (self.Stoichio_matrix.to_numpy()[0])])
 
-            Independent_rows = []
-            Dependent_rows = []
-            # Else we consider the first row of the matrix that is not external as the first row of the reduced Nr matrix
-            index_start = 0
-            while (
-                self.metabolites.df.at[
-                    self.metabolites.df.index[index_start], "External"
-                ]
-                == True
-            ):
-                Dependent_rows.append(index_start)
-                index_start += 1
-
-            Nr = N[index_start]
-            Independent_rows.append(index_start)
-            index_start += 1
-
-            # Test to determine if the first non-external row of the matrix is null
-            test_first_line = False
-            for i in range(N.shape[1]):
-                if N[index_start][i] != 0:
-                    test_first_line = True
-
-            if test_first_line == False:
-                raise ValueError(
-                    f"The {index_start}-th line is the first one that represent a non-external metabolite, but it is full of 0 !"
+        for i in range(1, self.Stoichio_matrix.to_numpy().shape[0]):
+            # If the row do not represent an external metabolite
+            if i not in dependent_row:
+                N_without_ext = np.vstack(
+                    (N_without_ext, self.Stoichio_matrix.to_numpy()[i])
                 )
-
-            # For every row of N, of the RREF of Nr + the row have a non-null elements
-            # => this row is independent
-            for i, row in enumerate(N[index_start:]):
-                # If the metabolite isn't considered as a external metabolite
-                if (
-                    self.metabolites.df.at[
-                        self.metabolites.df.index[index_start + i], "External"
-                    ]
-                    == True
-                ):
-                    Dependent_rows.append(index_start + i)
-
-                # If the every element of the row is null => we consider it as dependent
-                elif np.max(np.abs(N[index_start + i])) == 0.0:
-                    Dependent_rows.append(index_start + i)
-
-                # If the row is independent, we add it to Nr
-                elif is_independent(Nr, row):
-                    Independent_rows.append(index_start + i)
-                    Nr = np.block([[Nr], [row]])
-
-                else:
-                    Dependent_rows.append(index_start + i)
-
-            if Nr.shape[0] <= 1 or Nr.shape[1] <= 1:
-                raise IndexError(
-                    f"1-dimensional array given for inversion. Array must be at least two-dimensional"
-                )
-
+            # If it represent an external metabolite, we remplace its row by a row of 0
             else:
-                L = np.round(np.dot(N, np.linalg.pinv(Nr)), 12)
+                N_without_ext = np.vstack(
+                    (
+                        N_without_ext,
+                        np.array([0 for i in (self.Stoichio_matrix.to_numpy()[0])]),
+                    )
+                )
 
-                Nr = pd.DataFrame(columns=N_df.columns)
+        matrix, index_inde = np.unique(N_without_ext, axis=0, return_index=True)
 
-                for i, metabolite in enumerate(N_df.index):
-                    if i in Independent_rows:
-                        Nr.loc[metabolite] = N_df.loc[metabolite]
+        # We add all the index of the dependent row to the list with the external metabolites
+        for i in range(self.Stoichio_matrix.shape[0]):
+            if i not in index_inde:
+                dependent_row.append(i)
 
-            return (L, Nr)
+        # And we creat a list with the index of the independant metabolite
+        independent_row = []
+        for i in range(self.Stoichio_matrix.shape[0]):
+            if i not in dependent_row:
+                independent_row.append(i)
 
-        self.__cache_Link_matrix, self.__cache_Reduced_Stoichio_matrix = link_matrix(
-            self.Stoichio_matrix
-        )
+        # Creation of a list with the name of the independant metabolites
+        list_meta_inde = []
+        for i, meta in enumerate(self.Stoichio_matrix.index):
+            if i in independent_row:
+                list_meta_inde.append(meta)
+
+        # Creation of the reduced stoichio matrix
+        Nr = self.Stoichio_matrix.loc[list_meta_inde]
+        # Then we deduce about from Nr the link matrix
+        L = np.dot(self.Stoichio_matrix.to_numpy(), np.linalg.pinv(Nr.to_numpy()))
+
+        self.__cache_Link_matrix = L
+        self.__cache_Reduced_Stoichio_matrix = Nr
 
         return (self.__cache_Link_matrix, self.__cache_Reduced_Stoichio_matrix)
 
