@@ -57,40 +57,59 @@ class Reaction_class:
 
         # Look if the reaction is already in the model
         if name in self.df.index:
-            raise TypeError('The reaction "' + name + '" is already in the model !')
+            raise NameError('The reaction "' + name + '" is already in the model !')
 
         # Else, the reaction is add to the model by an add to the DataFrame
         else:
+            # Add the reaction to the reactions dataframe
             self.df.loc[name] = [metabolites, k_eq, law, flux]
 
-            for reaction in self.df.index:
-                # If the the reaction is not in the orginal Stoichiometry matrix => it was add
-                if reaction not in self.__class_model_instance.Stoichio_matrix.columns:
-                    # We add a colomn of 0
-                    self.__class_model_instance.Stoichio_matrix[reaction] = [
-                        0
-                        for i in range(
-                            self.__class_model_instance.Stoichio_matrix.shape[0]
-                        )
-                    ]
+            # Add a null columns to the stoichio matrix N
+            if name not in self.__class_model_instance.Stoichio_matrix.columns:
+                self.__class_model_instance.Stoichio_matrix[name] = 0.0
 
-                    # We check the stoichiometric coefficient link to this reaction in order to automatically add them to the matrix
-                    for meta in list(self.df.loc[reaction, "Metabolites"].keys()):
-                        if (
-                            meta
-                            not in self.__class_model_instance.Stoichio_matrix.index
-                        ):
-                            # If the metabolite is not in the model, we add it
-                            self.__class_model_instance.metabolites.add(meta)
+            for meta in list(metabolites.keys()):
+                if meta not in self.__class_model_instance.Stoichio_matrix.index:
+                    # If the metabolite is not in the model, we add it
+                    self.__class_model_instance.metabolites.add(meta)
 
-                        # Then we add the correct stoichiometric coefficients
-                        self.__class_model_instance.Stoichio_matrix.loc[
-                            meta, reaction
-                        ] = self.df.loc[reaction, "Metabolites"][meta]
+                # Then we add the correct stoichiometric coefficients
+                self.__class_model_instance.Stoichio_matrix.at[meta, name] = self.df.at[
+                    name, "Metabolites"
+                ][meta]
 
             # Updating the network
-            # self.__class_model_instance._update_network(session="reaction")
+            self.__class_model_instance._update_network()
             self.__class_model_instance._update_elasticity()
+
+    #################################################################################
+    #########           Fonction to change a reaction                      ##########
+
+    def change(self, name: str, metabolites=None, k_eq=None, law="", flux=None):
+        ### Description of the fonction
+        """
+        Fonction to change a reaction properties in the model
+
+        name           : Name of the reaction to change
+        metabolites    : Dictionnary of the metabolites used in this reaction
+        k_eq           : Float for the equilibrium constant of the reaction
+        law            : Strig to specify the type of law of th ereactino
+        flux           : Float for th evalue of the lux
+
+        """
+
+        if name not in self.df.index:
+            raise NameError(f"The name '{name}' is not in the reactions dataframe")
+
+        else:
+            if metabolites != None:
+                self.df.at[name, "Metabolites"] = metabolites
+            if k_eq != None:
+                self.df.at[name, "Equilibrium constant"] = k_eq
+            if law != None:
+                self.df.at[name, "Law"] = law
+            if flux != None:
+                self.df.at[name, "Flux (mmol/gDW/h)"] = flux
 
     #################################################################################
     #########           Fonction to remove a reaction                      ##########

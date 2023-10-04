@@ -32,7 +32,7 @@ class Metabolite_class:
 
     #################################################################################
     #########           Fonction to add a metabolite                         ##########
-    def add(self, name=None, external=False, concentration=1):
+    def add(self, name: str, external=False, concentration=1.0):
         ### Description of the fonction
         """
         Fonction to add a matabolite to the model
@@ -67,17 +67,35 @@ class Metabolite_class:
                 self.__cache_meta.append(name)
                 for meta in self.__cache_meta:
                     if meta not in self.__class_model_instance.Stoichio_matrix.index:
-                        self.__class_model_instance.Stoichio_matrix.loc[meta] = [
-                            0
-                            for i in range(
-                                self.__class_model_instance.Stoichio_matrix.shape[1]
-                            )
-                        ]
+                        self.__class_model_instance.Stoichio_matrix.loc[meta] = 0.0
+
                 self.__cache_meta = []
 
             # Updating the network
-            # self.__class_model_instance._update_network(session = "meta")
+            # self.__class_model_instance._update_network()
             self.__class_model_instance._update_elasticity()
+
+    #################################################################################
+    #########           Fonction to change a metabolite                    ##########
+    def change(self, name: str, external=None, concentration=None):
+        ### Description of the fonction
+        """
+        Fonction to change a metabolite properties in the model
+
+        name           : Name of the metabolite to change
+        external       : Bool to specifies if the metabolite is external
+        concentration  : Float for the concentration of the metabolites
+
+        /!\ If you use external metabolite as parameters
+        """
+        if name not in self.df.index:
+            raise NameError(f"The name '{name}' is not in the metabolite dataframe")
+
+        else:
+            if external != None:
+                self.df.at[name, "External"] = external
+            if concentration != None:
+                self.df.at[name, "Concentration (mmol/gDW)"] = concentration
 
     #################################################################################
     #########           Fonction to remove a metabolite                    ##########
