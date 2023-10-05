@@ -34,8 +34,8 @@ class Elasticity_p_class:
         return self._df
 
     @df.setter
-    def p(self, matrix):
-        if type(matrix) == type(np.ndarray([])):
+    def df(self, matrix):
+        if isinstance(matrix, np.ndarray):
             if matrix.shape != self.df.shape:
                 raise IndexError(
                     "The shape of your matrix isn't matching with the elasticity matrix"
@@ -44,7 +44,7 @@ class Elasticity_p_class:
                 self._df.values[:] = matrix
                 self.__class_model_instance._reset_value(session="E_p")
 
-        if type(matrix) == type(pd.DataFrame()):
+        elif type(matrix) == type(pd.DataFrame()):
             if matrix.shape != self.df.shape:
                 raise IndexError(
                     "The shape of your matrix isn't matching with the elasticity matrix"
