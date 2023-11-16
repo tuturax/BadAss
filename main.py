@@ -172,7 +172,7 @@ class model:
 
         return (self.__cache_Link_matrix, self.__cache_Reduced_Stoichio_matrix)
 
-    # The attibute with __ are the one compute with numpy and aim to be call for other compuation
+    # The attibute with __ are the one compute with numpy and aims to be call for other compuation
     # The attribute without it are only the representation of the them on dataframe
 
     # MCA properties
@@ -181,9 +181,7 @@ class model:
     # Jacobian
     @property  # Core
     def __Jacobian(self):
-        if self.__cache_Jacobian is not None:
-            return self.__cache_Jacobian
-        else:
+        if self.__cache_Jacobian is None:
             # Reset of the cache value of the inversed matrix of J
             self.__cache_Reversed_Jacobian = None
             # Compute the J matrix
@@ -191,7 +189,8 @@ class model:
             self.__cache_Jacobian = np.dot(
                 Nr.to_numpy(), np.dot(self.elasticity.s.df.to_numpy(), L)
             )
-            return self.__cache_Jacobian
+
+        return self.__cache_Jacobian
 
     @property  # Displayed
     def Jacobian(self):
@@ -202,9 +201,7 @@ class model:
     # Inverse of the Jacobian
     @property  # Core
     def __Jacobian_reversed(self):
-        if self.__cache_Reversed_Jacobian is not None:
-            return self.__cache_Reversed_Jacobian
-        else:
+        if self.__cache_Reversed_Jacobian is None:
             # Reset of the cache value of the MCA coeff
             self.__cache_R_s_p = None
             self.__cache_R_v_p = None
@@ -212,7 +209,8 @@ class model:
             self.__cache_R_v_p = None
             # Compute the J-1 matrix
             self.__cache_Reversed_Jacobian = np.linalg.inv(self.__Jacobian)
-            return self.__cache_Reversed_Jacobian
+
+        return self.__cache_Reversed_Jacobian
 
     @property  # Displayed
     def Jacobian_reversed(self):
@@ -220,23 +218,20 @@ class model:
         J_inv = np.linalg.inv(J_df.to_numpy())
         return pd.DataFrame(J_inv, index=J_df.index, columns=J_df.columns)
 
-    ########################################
-    # Response coefficient of the metabolite : MCA
+    ##############################################
+    # Response coefficient : MCA
 
     # R_s_p
     @property  # Core
     def __R_s_p(self):
-        if self.__cache_R_s_p is not None:
-            return self.__cache_R_s_p
-        else:
-            self.__cache_R_s_p = -np.dot(
-                self.Link_matrix[0],
-                np.dot(
-                    self.__Jacobian_reversed,
-                    np.dot(self.Link_matrix[1], self.elasticity.p.df.to_numpy()),
-                ),
+        if self.__cache_R_s_p is None:
+            C = -np.dot(
+                np.dot(self.Link_matrix[0], self.__Jacobian_reversed),
+                self.Link_matrix[1],
             )
-            return self.__cache_R_s_p
+            self.__cache_R_s_p = np.dot(C, self.elasticity.p.df.to_numpy())
+
+        return self.__cache_R_s_p
 
     @property  # Displayed
     def R_s_p(self):
@@ -246,17 +241,19 @@ class model:
             columns=self.parameters.df.index,
         )
 
+    def pripri(self):
+        print(self.__R_s_p)
+
     # R_v_p
     @property  # Core
     def __R_v_p(self):
-        if self.__cache_R_v_p is not None:
-            return self.__cache_R_v_p
-        else:
+        if self.__cache_R_v_p is None:
             self.__cache_R_v_p = (
                 np.dot(self.elasticity.s.df.to_numpy(), self.__R_s_p)
                 + self.elasticity.p.df.to_numpy()
             )
-            return self.__cache_R_v_p
+
+        return self.__cache_R_v_p
 
     @property  # Displayed
     def R_v_p(self):
@@ -269,14 +266,13 @@ class model:
     # R_s_c
     @property  # Core
     def __R_s_c(self):
-        if self.__cache_R_s_c is not None:
-            return self.__cache_R_s_c
-        else:
+        if self.__cache_R_s_c is None:
             self.__cache_R_s_c = -np.dot(
                 self.Jacobian_reversed,
                 np.dot(self.__Stoichio_matrix, self.elasticity.s.df.to_numpy()),
             ) + np.identity(len(self.__Stoichio_matrix))
-            return self.__cache_R_s_c
+
+        return self.__cache_R_s_c
 
     @property  # Displayed
     def R_s_c(self):
@@ -289,11 +285,9 @@ class model:
     # R_v_c
     @property  # Core
     def __R_v_c(self):
-        if self.__cache_R_v_c is not None:
-            return self.__cache_R_v_c
-        else:
+        if self.__cache_R_v_c is None:
             self.__cache_R_v_c = np.dot(self.elasticity.s.df.to_numpy(), self.__R_s_c)
-            return self.__cache_R_v_c
+        return self.__cache_R_v_c
 
     @property  # Displayed
     def R_v_c(self):
@@ -303,6 +297,7 @@ class model:
             columns=self.metabolites.df.index,
         )
 
+    ##########################
     # Big matrix of response R
     @property  # Core
     def __R(self):
@@ -317,30 +312,43 @@ class model:
             columns=self.parameters.df.index,
         )
 
+    #########################################
+    # Standard deviation of parameters vector
     @property
     def __Standard_deviations(self):
         return self.parameters.df["Standard deviation"]
 
-    @property
+    ###################
+    # Covariance matrix
+    @property  # Core
     def __covariance(self):
-        R = self.__R
+        # If the cache is empty, we recompute the cov matrix and atribute the result to the cache value
+        if self.__cache_cov is None:
+            R = self.__R
 
-        covariance_dp = np.identity(len(self.__Standard_deviations))
-        for i in range(len(covariance_dp)):
-            covariance_dp[i][i] = self.__Standard_deviations[i] ** 2
+            covariance_dp = np.identity(len(self.__Standard_deviations))
 
-        matrix_RC = np.dot(R, covariance_dp)
+            for i, parameter in enumerate(self.parameters.df.index):
+                covariance_dp[i][i] = (
+                    self.parameters.df.at[parameter, "Standard deviation"] ** 2
+                )
 
-        Cov = np.block(
-            [
-                [covariance_dp, np.dot(covariance_dp, R.T)],
-                [matrix_RC, np.dot(matrix_RC, np.transpose(R))],
-            ]
-        )
-        return Cov
+            matrix_RC = np.dot(R, covariance_dp)
 
-    @property
+            Cov = np.block(
+                [
+                    [covariance_dp, np.dot(covariance_dp, R.T)],
+                    [matrix_RC, np.dot(matrix_RC, R.T)],
+                ]
+            )
+            self.__cache_cov = Cov
+
+        # Then we return the cache value
+        return self.__cache_cov
+
+    @property  # Displayed
     def covariance(self):
+        # Return the dataframe of the covariance matrix by a call of it
         return pd.DataFrame(
             self.__covariance,
             index=(
@@ -353,6 +361,104 @@ class model:
                 + self.metabolites.df.index.to_list()
                 + self.reactions.df.index.to_list()
             ),
+        )
+
+    ################
+    # Entropy matrix
+    @property  # Core
+    def __entropy(self):
+        if self.__cache_h is None:
+            vec_h = []
+            for index in self.covariance.index:
+                vec_h.append(
+                    0.5
+                    * (
+                        np.log(2 * np.pi * np.exp(1))
+                        + np.log(self.covariance.at[index, index])
+                    )
+                )
+
+            self.__cache_h = vec_h
+
+        return self.__cache_h
+
+    @property  # Displayed
+    def entropy(self):
+        return pd.DataFrame(
+            self.__entropy, index=self.covariance.index, columns=["Entropy"]
+        )
+
+    ######################
+    # Joint entropy matrix
+    @property  # Core
+    def __entropy_joint(self):
+        if self.__cache_joint_h is None:
+            Cov = self.__covariance
+            joint_h = np.zeros(Cov.shape)
+            for i in range(Cov.shape[0]):
+                for j in range(Cov.shape[1]):
+                    if Cov[i][i] * Cov[j][j] - Cov[i][j] * Cov[j][i] <= 0:
+                        joint_h[i][j] = np.inf
+
+                    else:
+                        joint_h[i][j] = np.log(2 * np.pi * np.exp(1)) + 0.5 * np.log(
+                            Cov[i][i] * Cov[j][j] - Cov[i][j] * Cov[j][i]
+                        )
+
+            self.__cache_joint_h = joint_h
+
+        return self.__cache_joint_h
+
+    @property  # Displayed
+    def entropy_joint(self):
+        return pd.DataFrame(
+            self.__entropy_joint,
+            index=self.covariance.index,
+            columns=self.covariance.columns,
+        )
+
+    ###########################
+    # Conditional entropy
+    @property  # Core
+    def __entropy_conditional(self):
+        if self.__cache_conditional_h is None:
+            condi_h = np.zeros(shape=self.covariance.shape)
+            for i in range(condi_h.shape[0]):
+                for j in range(condi_h.shape[1]):
+                    condi_h[i][j] = self.__entropy_joint[j][i] - self.__entropy[j]
+            self.__cache_conditional_h = condi_h
+
+        return self.__cache_conditional_h
+
+    @property  # Displayed
+    def entropy_conditional(self):
+        return pd.DataFrame(
+            self.__entropy_conditional,
+            index=self.covariance.index,
+            columns=self.covariance.columns,
+        )
+
+    ###########################
+    # Mutual information matrix
+    @property  # Core
+    def __MI(self):
+        if self.__cache_MI is None:
+            MI = np.zeros(shape=self.covariance.shape)
+            for i in range(MI.shape[0]):
+                for j in range(MI.shape[1]):
+                    MI[i][j] = self.__entropy_joint[i][j] - (
+                        self.__entropy[i] + self.__entropy[j]
+                    )
+            self.__cache_MI = MI
+
+        return self.__cache_MI
+
+    @property  # Displayed
+    def MI(self):
+        return pd.DataFrame(
+            self.__MI,
+            index=self.covariance.index,
+            columns=self.covariance.columns,
         )
 
     #############################################################################
@@ -382,6 +488,12 @@ class model:
             self.__cache_R_v_p = None
             self.__cache_R_s_c = None
             self.__cache_R_v_p = None
+
+        self.__cache_cov = None
+        self.__cache_h = None
+        self.__cache_joint_h = None
+        self.__cache_MI = None
+        self.__cache_conditional_h = None
 
     #############################################################################
     #############   Function to update after a modification of N  ###############
@@ -503,7 +615,7 @@ class model:
 
     #################################################################################
     ############    Function that return the Mutual Inforamtion matrix   ############
-    def MI(self, groups=[]):
+    def MI_group(self, groups=[]):
         ### Description of the fonction
         """
         Fonction to compute the Mutual information
@@ -512,7 +624,7 @@ class model:
 
         if groups = [] (by defalut) we take all variables/parameters indivudually
         """
-        # Line to deal with the 1/0
+        # Line to deal with the ./0 case
         np.seterr(divide="ignore", invalid="ignore")
 
         Cov_df = self.covariance
@@ -524,13 +636,13 @@ class model:
 
             for i in range(Cov.shape[0]):
                 for j in range(Cov.shape[1]):
-                    denominator = Cov[i][i] * Cov[j][j] - Cov[i][j] * Cov[j][i]
-                    if denominator == 0:
+                    numerator = Cov[i][i] * Cov[j][j] - Cov[i][j] * Cov[j][i]
+                    denominator = Cov[i][i] * Cov[j][j]
+                    if (numerator / denominator <= 0) or denominator == 0:
                         MI[i][j] = np.inf
+
                     else:
-                        MI[i][j] = (1 / (2 * np.log(2))) * np.log(
-                            Cov[i][i] * Cov[j][j] / denominator
-                        )
+                        MI[i][j] = 0.5 * np.log(numerator / denominator)
 
             return pd.DataFrame(MI, index=Cov_df.index, columns=Cov_df.columns)
 
@@ -837,6 +949,23 @@ class model:
         return (unused_reactions, unused_metabolites)
 
     #############################################################################
+    ###################   Function to check the model   #########################
+    @property
+    def check_unstable(self):
+        eigen_values = np.linalg.eigvals(self.Jacobian.to_numpy())
+
+        positif = False
+        for value in eigen_values:
+            if np.real(value) > 0:
+                positif = True
+
+        if positif == True:
+            print(
+                "The jacobian matrix have positive eigen values, that could lead to an unstable state"
+            )
+        return eigen_values
+
+    #############################################################################
     ###################   Function plot the MI matrix   #########################
     def plot(
         self, result="MI", title="", label=False, value_in_cell=False, index_to_keep=[]
@@ -848,7 +977,7 @@ class model:
         result = result.lower()
 
         if result == "mi" or result == "mutual information":
-            data_frame = self.MI()
+            data_frame = self.MI_group()
         elif result == "rho" or result == "correlation":
             data_frame = self.rho()
         elif result == "cov" or result == "covariance":
