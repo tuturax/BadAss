@@ -1,4 +1,0 @@
-[INFO 2023-10-05 15:10:04] Starting unique-name/2023-10-05-15-10-04-.log!
-[INFO 2023-10-05 15:10:04] Hi, I am a program, starting now!
-[DEBUG 2023-10-05 15:10:04] <class 'logging.Logger'>
-[INFO 2023-10-05 15:10:04] Starting experiment with random seed 42...
