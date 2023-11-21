@@ -10,9 +10,9 @@ import pandas as pd
 class Enzymes_class:
     #############################################################################
     ###############             Initialisation              #####################
-    def __init__(self, class_model_instance):
+    def __init__(self, class_MODEL_instance):
         # Private attribute for the instance of the Main class
-        self.__class_model_instance = class_model_instance
+        self.__class_MODEL_instance = class_MODEL_instance
 
         self.df = pd.DataFrame(columns=["Concentration / Activity", "Reactions linked"])
 
@@ -41,11 +41,7 @@ class Enzymes_class:
         """
 
         # Look if the enzyme is already in the model
-        if name in self.df.index.to_list():
-            raise TypeError('The enzyme "' + name + '" is already in the model !')
-
-        # Else, the enzyme is add to the model by an add to the DataFrame
-        else:
+        if name not in self.df.index.to_list():
             self.df.loc[name] = [mean, reaction_linked]
 
     #################################################################################
@@ -68,11 +64,11 @@ class Enzymes_class:
             self.df.drop(name, inplace=True)
 
             # Removing this enzyme from the elasticity matrix E_p
-            if name in self.__class_model_instance.elasticity.p.df.index:
-                self.__class_model_instance.elasticity.p.df.drop(
+            if name in self.__class_MODEL_instance.elasticity.p.df.index:
+                self.__class_MODEL_instance.elasticity.p.df.drop(
                     name, axis=1, inplace=True
                 )
-                self.__class_model_instance._reset_value()
+                self.__class_MODEL_instance._reset_value()
 
     #################################################################################
     #########      Fonction to add an enzyme link to every reaction        ##########
@@ -81,7 +77,7 @@ class Enzymes_class:
         """
         Fonction to add an enzyme to every reaction of the model
         """
-        for reaction in self.__class_model_instance.reactions.df.index:
+        for reaction in self.__class_MODEL_instance.reactions.df.index:
             name_enzyme = "enzyme_" + reaction
             # Look if the enzyme is already in the model
             if name_enzyme not in self.df.index.to_list():

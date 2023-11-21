@@ -11,9 +11,9 @@ import numpy as np
 class Sub_Elasticity_class:
     #############################################################################
     #############             Initialisation                #####################
-    def __init__(self, class_model_instance):
+    def __init__(self, class_MODEL_instance):
         # Private attribute for the instance of the Main class
-        self.__class_model_instance = class_model_instance
+        self.__class_MODEL_instance = class_MODEL_instance
 
         self._df = pd.DataFrame()
         self.thermo = pd.DataFrame()
@@ -55,11 +55,11 @@ class Sub_Elasticity_class:
                 )
             else:
                 self._df.values[:] = matrix
-                self.__class_model_instance._reset_value(session="E_s")
+                self.__class_MODEL_instance._reset_value(session="E_s")
 
         elif type(matrix) == type(pd.DataFrame()):
             self._df = matrix
-            self.__class_model_instance._reset_value(session="E_s")
+            self.__class_MODEL_instance._reset_value(session="E_s")
 
         else:
             raise TypeError(
@@ -81,7 +81,7 @@ class Sub_Elasticity_class:
         # Reset of the main elasticity dataframe
         self.df.fillna(0, inplace=True)
         # Reset of the value of the system
-        self.__class_model_instance._reset_value(session="E_s")
+        self.__class_MODEL_instance._reset_value(session="E_s")
 
     #################################################################################
     #########     Fonction to update the elasticities matrix               ##########
@@ -91,7 +91,7 @@ class Sub_Elasticity_class:
         Method to attribute to the E_s matrix the value of a half-satured enzyme
         """
         self.reset()
-        self._df = -0.5 * self.__class_model_instance.Stoichio_matrix.transpose()
+        self._df = -0.5 * self.__class_MODEL_instance.Stoichio_matrix.transpose()
 
     #################################################################################
     #########        Fonction to change a coefficient of the matrix        ##########
@@ -104,7 +104,7 @@ class Sub_Elasticity_class:
             )
         else:
             self.df.at[flux_name, metabolite_name] = value
-            self.__class_model_instance._reset_value(session="E_s")
+            self.__class_MODEL_instance._reset_value(session="E_s")
 
     #################################################################################
     #########     Fonction to update the elasticities matrix               ##########
@@ -115,7 +115,7 @@ class Sub_Elasticity_class:
         """
         self.reset()
 
-        N = self.__class_model_instance.Stoichio_matrix.to_numpy()
+        N = self.__class_MODEL_instance.Stoichio_matrix.to_numpy()
 
         # Definition of the sub_elasticity of the thermodynamic effects
         M_plus = np.zeros(N.shape)
@@ -132,14 +132,14 @@ class Sub_Elasticity_class:
         M_moins = np.transpose(M_moins)
         M_plus = np.transpose(M_plus)
 
-        L, N_red = self.__class_model_instance.Link_matrix
+        L, N_red = self.__class_MODEL_instance.Link_matrix
 
-        c_int_df = self.__class_model_instance.metabolites.df.loc[
-            self.__class_model_instance.metabolites.df.index.isin(N_red.index)
+        c_int_df = self.__class_MODEL_instance.metabolites.df.loc[
+            self.__class_MODEL_instance.metabolites.df.index.isin(N_red.index)
         ]
         c_int = c_int_df["Concentration (mmol/gDW)"].to_numpy()
 
-        k_eq = self.__class_model_instance.reactions.df[
+        k_eq = self.__class_MODEL_instance.reactions.df[
             "Equilibrium constant"
         ].to_numpy()
 

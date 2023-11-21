@@ -14,12 +14,12 @@ from layer_1.layer_2.elasticity_p import Elasticity_p_class
 class Elasticity_class:
     #############################################################################
     #############             Initialisation                #####################
-    def __init__(self, class_model_instance):
+    def __init__(self, class_MODEL_instance):
         # Private attribute for the instance of the Main class
-        self.__class_model_instance = class_model_instance
+        self.__class_MODEL_instance = class_MODEL_instance
 
-        self.s = Sub_Elasticity_class(class_model_instance)
-        self.p = Elasticity_p_class(class_model_instance)
+        self.s = Sub_Elasticity_class(class_MODEL_instance)
+        self.p = Elasticity_p_class(class_MODEL_instance)
 
     #################################################################################
     #########           Return the Dataframe of the elasticity p           ##########

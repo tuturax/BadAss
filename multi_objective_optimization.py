@@ -417,9 +417,9 @@ def main():
 
             return [random.uniform(-2.0, 2.0) for _ in range(0, n_cols * n_rows)]
 
-        from main import model
+        from main import MODEL
 
-        my_model = model()
+        my_model = MODEL()
         my_model.read_SBML()
 
         my_model.enzymes.add_to_all_reaction()

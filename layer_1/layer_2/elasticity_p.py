@@ -11,9 +11,9 @@ import numpy as np
 class Elasticity_p_class:
     #############################################################################
     #############             Initialisation                #####################
-    def __init__(self, class_model_instance):
+    def __init__(self, class_MODEL_instance):
         # Private attribute for the instance of the Main class
-        self.__class_model_instance = class_model_instance
+        self.__class_MODEL_instance = class_MODEL_instance
 
         self._df = pd.DataFrame(columns=["Temperature"])
 
@@ -42,7 +42,7 @@ class Elasticity_p_class:
                 )
             else:
                 self._df.values[:] = matrix
-                self.__class_model_instance._reset_value(session="E_p")
+                self.__class_MODEL_instance._reset_value(session="E_p")
 
         elif type(matrix) == type(pd.DataFrame()):
             if matrix.shape != self.df.shape:
@@ -51,7 +51,7 @@ class Elasticity_p_class:
                 )
             else:
                 self._df = matrix
-                self.__class_model_instance._reset_value(session="E_p")
+                self.__class_MODEL_instance._reset_value(session="E_p")
 
         else:
             raise TypeError(
@@ -69,4 +69,4 @@ class Elasticity_p_class:
             )
         else:
             self.df.at[flux_name, parameter_name] = value
-            self.__class_model_instance._reset_value(session="E_p")
+            self.__class_MODEL_instance._reset_value(session="E_p")

@@ -11,9 +11,9 @@ import numpy as np
 class Regulation_class:
     #############################################################################
     #############             Initialisation                #####################
-    def __init__(self, class_model_instance):
+    def __init__(self, class_MODEL_instance):
         # Private attribute for the instance of the Main class
-        self.__class_model_instance = class_model_instance
+        self.__class_MODEL_instance = class_MODEL_instance
 
         self.df = pd.DataFrame(
             columns=[
@@ -73,13 +73,13 @@ class Regulation_class:
             )
 
         # Look if the regulated flux is in the model
-        elif regulated not in self.__class_model_instance.reactions.df.index:
+        elif regulated not in self.__class_MODEL_instance.reactions.df.index:
             raise NameError(
                 f'The reaction "{regulated}" is not in the reaction dataframe !'
             )
 
         #  Look if the regulator metabolite is in the model
-        elif regulator not in self.__class_model_instance.metabolites.df.index:
+        elif regulator not in self.__class_MODEL_instance.metabolites.df.index:
             raise NameError(
                 f'The metabolite "{regulator}" is not in the metabolite dataframe !'
             )
@@ -88,7 +88,7 @@ class Regulation_class:
         self.df.loc[name] = [regulated, regulator, coefficient, type_regulation]
 
         if allosteric == True:
-            self.__class_model_instance.elasticity.s.df.at[
+            self.__class_MODEL_instance.elasticity.s.df.at[
                 regulated, regulator
             ] += coefficient
 
@@ -97,14 +97,14 @@ class Regulation_class:
             enzyme = "enzyme_" + name
 
             # We concidere now this enzyme as a metabolite
-            self.__class_model_instance.metabolites.add(name=enzyme)
-            self.__class_model_instance.reactions.add(
+            self.__class_MODEL_instance.metabolites.add(name=enzyme)
+            self.__class_MODEL_instance.reactions.add(
                 name="creation_" + name, metabolites={enzyme: 1}
             )
-            self.__class_model_instance.reactions.add(
+            self.__class_MODEL_instance.reactions.add(
                 name="destruction_" + name, metabolites={enzyme: -1}
             )
-            self.__class_model_instance.elasticity.s.df.at[
+            self.__class_MODEL_instance.elasticity.s.df.at[
                 "creation_" + name, regulator
             ] += coefficient
 
@@ -131,14 +131,14 @@ class Regulation_class:
             # if it is an allosteric/direct regulation
             if self.df.at[name_regu, "Type regulation"] == "allosteric":
                 # Soustraction of the old value and addition of the new one on the E_s matrix
-                self.__class_model_instance.elasticity.s.df.at[
+                self.__class_MODEL_instance.elasticity.s.df.at[
                     regulated, regulator
                 ] += (new_coeff - self.df.at[name_regu, "Coefficient of regulation"])
 
             # Case of a transcriptional/undirect regulation
             else:
                 # Soustraction of the old value and addition of the new one on the E_s matrix
-                self.__class_model_instance.elasticity.s.df.at[
+                self.__class_MODEL_instance.elasticity.s.df.at[
                     "creation_" + name_regu, regulator
                 ] += (new_coeff - self.df.at[name_regu, "Coefficient of regulation"])
 

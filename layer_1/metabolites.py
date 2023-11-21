@@ -10,9 +10,9 @@ import pandas as pd
 class Metabolite_class:
     #############################################################################
     #############             Initialisation                #####################
-    def __init__(self, class_model_instance):
+    def __init__(self, class_MODEL_instance):
         # Private attribute for the instance of the Main class
-        self.__class_model_instance = class_model_instance
+        self.__class_MODEL_instance = class_MODEL_instance
 
         # Private list to deal with the fact that a dataframe cannot be filled if there is no collumn in the dataframe
         self.__cache_meta = []
@@ -56,7 +56,7 @@ class Metabolite_class:
             self.df.loc[name] = [external, concentration]
 
             # If there is no reaction in the columns of the soichio metric matrix, we keep in memeory the metabolite
-            if self.__class_model_instance.Stoichio_matrix.columns.size == 0:
+            if self.__class_MODEL_instance.Stoichio_matrix.columns.size == 0:
                 self.__cache_meta.append(name)
                 print(
                     "Don't worry, the metabolite will be add after the add of the 1st reaction"
@@ -66,14 +66,14 @@ class Metabolite_class:
             else:
                 self.__cache_meta.append(name)
                 for meta in self.__cache_meta:
-                    if meta not in self.__class_model_instance.Stoichio_matrix.index:
-                        self.__class_model_instance.Stoichio_matrix.loc[meta] = 0.0
+                    if meta not in self.__class_MODEL_instance.Stoichio_matrix.index:
+                        self.__class_MODEL_instance.Stoichio_matrix.loc[meta] = 0.0
 
                 self.__cache_meta = []
 
             # Updating the network
-            # self.__class_model_instance._update_network()
-            self.__class_model_instance._update_elasticity()
+            # self.__class_MODEL_instance._update_network()
+            self.__class_MODEL_instance._update_elasticity()
 
     #################################################################################
     #########           Fonction to change a metabolite                    ##########
@@ -116,32 +116,32 @@ class Metabolite_class:
             # Else, the metabolite is remove from the dataframe
             self.df.drop(name, inplace=True)
 
-            for meta in self.__class_model_instance.Stoichio_matrix.index:
+            for meta in self.__class_MODEL_instance.Stoichio_matrix.index:
                 # If the the meta is not in the modified metabolite dataframe => it was deleted
                 if meta not in self.df.index:
-                    self.__class_model_instance.Stoichio_matrix.drop(
+                    self.__class_MODEL_instance.Stoichio_matrix.drop(
                         meta, axis=0, inplace=True
                     )
 
             # And from every mention of it in the reaction dataframe
-            for reaction in self.__class_model_instance.reactions.df.index:
+            for reaction in self.__class_MODEL_instance.reactions.df.index:
                 key_to_remove = [
                     cle
-                    for cle in self.__class_model_instance.reactions.df.loc[
+                    for cle in self.__class_MODEL_instance.reactions.df.loc[
                         reaction, "Metabolites"
                     ].keys()
                     if name in cle
                 ]
                 for key_to_remove in key_to_remove:
-                    self.__class_model_instance.reactions.df.loc[
+                    self.__class_MODEL_instance.reactions.df.loc[
                         reaction, "Metabolites"
                     ].pop(key_to_remove)
 
             # Updating the network
-            self.__class_model_instance._update_network
+            self.__class_MODEL_instance._update_network
 
             # Remove this metabolite from the elasticity matrix E_s
-            self.__class_model_instance.elasticity.s.df.drop(name, axis=1, inplace=True)
+            self.__class_MODEL_instance.elasticity.s.df.drop(name, axis=1, inplace=True)
 
     #################################################################################
     #########           Fonction to update the meta dataframe              ##########

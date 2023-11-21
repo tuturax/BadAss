@@ -15,9 +15,9 @@ from layer_1.regulation import Regulation_class
 
 
 #####################
-# Class model
+# Class MODEL
 #####################
-class model:
+class MODEL:
     #############################################################################
     ########   Class method to creat a model from stochi matrix    ##############
     @classmethod
@@ -114,58 +114,39 @@ class model:
         ):
             return (self.__cache_Link_matrix, self.__cache_Reduced_Stoichio_matrix)
 
+        # Definition of a local stoichio matrix that will change gradually in the property
+        N = self.Stoichio_matrix
+        # .copy() ?
+
         # Else we take a look to the dependent row of the stoichio matrix
-        dependent_row = []
-        # First we remove the external metabolite
-        for i, meta in enumerate(self.Stoichio_matrix.index):
-            if self.metabolites.df.at[meta, "External"] == True:
-                dependent_row.append(i)
+        dependent_rows = []
+        independent_rows = []
 
-        # If the first row is not external, we add it
-        if dependent_row[0] != 0:
-            N_without_ext = np.array([self.Stoichio_matrix.to_numpy()[0]])
-        # Else, we add a row of 0
-        else:
-            N_without_ext = np.array([0 for i in (self.Stoichio_matrix.to_numpy()[0])])
+        ext_meta_are_dependent = False
 
-        for i in range(1, self.Stoichio_matrix.to_numpy().shape[0]):
-            # If the row do not represent an external metabolite
-            if i not in dependent_row:
-                N_without_ext = np.vstack(
-                    (N_without_ext, self.Stoichio_matrix.to_numpy()[i])
-                )
-            # If it represent an external metabolite, we remplace its row by a row of 0
+        # Case where we remove we considere the external metabolite has dependent !
+        if ext_meta_are_dependent == True:
+            # First, we can remove the external metabolite
+            for meta in self.Stoichio_matrix.index:
+                if self.metabolites.df.at[meta, "External"] == True:
+                    # We add the external metabolite in the list of dependent row
+                    dependent_rows.append(meta)
+                    # And remove this metabolite from the local stoichio matrix N
+                    N = N.drop(meta)
+
+        _, independent = sympy.Matrix(N.to_numpy()).T.rref()
+
+        for i, meta in enumerate(N.index):
+            if i in independent:
+                independent_rows.append(meta)
             else:
-                N_without_ext = np.vstack(
-                    (
-                        N_without_ext,
-                        np.array([0 for i in (self.Stoichio_matrix.to_numpy()[0])]),
-                    )
-                )
+                dependent_rows.append(meta)
 
-        matrix, index_inde = np.unique(N_without_ext, axis=0, return_index=True)
+        # Build of the reduced stoichio matrix
+        Nr = N.loc[independent_rows]
 
-        # We add all the index of the dependent row to the list with the external metabolites
-        for i in range(self.Stoichio_matrix.shape[0]):
-            if i not in index_inde:
-                dependent_row.append(i)
-
-        # And we creat a list with the index of the independant metabolite
-        independent_row = []
-        for i in range(self.Stoichio_matrix.shape[0]):
-            if i not in dependent_row:
-                independent_row.append(i)
-
-        # Creation of a list with the name of the independant metabolites
-        list_meta_inde = []
-        for i, meta in enumerate(self.Stoichio_matrix.index):
-            if i in independent_row:
-                list_meta_inde.append(meta)
-
-        # Creation of the reduced stoichio matrix
-        Nr = self.Stoichio_matrix.loc[list_meta_inde]
-        # Then we deduce about from Nr the link matrix
-        L = np.dot(self.Stoichio_matrix.to_numpy(), np.linalg.pinv(Nr.to_numpy()))
+        # Then we deduce the link matrix L from Nr and N
+        L = np.dot(self.Stoichio_matrix.to_numpy(), np.linalg.inv(Nr.to_numpy()))
 
         self.__cache_Link_matrix = L
         self.__cache_Reduced_Stoichio_matrix = Nr
@@ -207,16 +188,22 @@ class model:
             self.__cache_R_v_p = None
             self.__cache_R_s_c = None
             self.__cache_R_v_p = None
+
             # Compute the J-1 matrix
-            self.__cache_Reversed_Jacobian = np.linalg.inv(self.__Jacobian)
+            J_inv = np.linalg.pinv(self.__Jacobian)
+
+            # Then we attribute to the cache value of the link matrix the new value
+            self.__cache_Reversed_Jacobian = J_inv
 
         return self.__cache_Reversed_Jacobian
 
     @property  # Displayed
     def Jacobian_reversed(self):
-        J_df = self.Jacobian
-        J_inv = np.linalg.inv(J_df.to_numpy())
-        return pd.DataFrame(J_inv, index=J_df.index, columns=J_df.columns)
+        return pd.DataFrame(
+            self.__Jacobian_reversed,
+            index=self.Jacobian.columns,
+            columns=self.Jacobian.index,
+        )
 
     ##############################################
     # Response coefficient : MCA
@@ -229,6 +216,7 @@ class model:
                 np.dot(self.Link_matrix[0], self.__Jacobian_reversed),
                 self.Link_matrix[1],
             )
+
             self.__cache_R_s_p = np.dot(C, self.elasticity.p.df.to_numpy())
 
         return self.__cache_R_s_p
@@ -240,9 +228,6 @@ class model:
             index=self.metabolites.df.index,
             columns=self.parameters.df.index,
         )
-
-    def pripri(self):
-        print(self.__R_s_p)
 
     # R_v_p
     @property  # Core
@@ -301,7 +286,9 @@ class model:
     # Big matrix of response R
     @property  # Core
     def __R(self):
-        return np.block([[self.__R_s_p], [self.__R_v_p]])
+        R = np.block([[self.__R_s_p], [self.__R_v_p]])
+
+        return R
 
     @property  # Displayed
     def R(self):
@@ -341,6 +328,7 @@ class model:
                     [matrix_RC, np.dot(matrix_RC, R.T)],
                 ]
             )
+
             self.__cache_cov = Cov
 
         # Then we return the cache value
@@ -391,7 +379,7 @@ class model:
     ######################
     # Joint entropy matrix
     @property  # Core
-    def __entropy_joint(self):
+    def __joint_entropy(self):
         if self.__cache_joint_h is None:
             Cov = self.__covariance
             joint_h = np.zeros(Cov.shape)
@@ -410,9 +398,9 @@ class model:
         return self.__cache_joint_h
 
     @property  # Displayed
-    def entropy_joint(self):
+    def joint_entropy(self):
         return pd.DataFrame(
-            self.__entropy_joint,
+            self.__joint_entropy,
             index=self.covariance.index,
             columns=self.covariance.columns,
         )
@@ -425,7 +413,7 @@ class model:
             condi_h = np.zeros(shape=self.covariance.shape)
             for i in range(condi_h.shape[0]):
                 for j in range(condi_h.shape[1]):
-                    condi_h[i][j] = self.__entropy_joint[j][i] - self.__entropy[j]
+                    condi_h[i][j] = self.__joint_entropy[j][i] - self.__entropy[j]
             self.__cache_conditional_h = condi_h
 
         return self.__cache_conditional_h
@@ -439,6 +427,29 @@ class model:
         )
 
     ###########################
+    # Correlation
+    @property  # Core
+    def __corelation(self):
+        if self.__cache_rho is None:
+            rho = np.zeros(shape=self.covariance.shape)
+            for i in range(rho.shape[0]):
+                for j in range(rho.shape[1]):
+                    rho[i][j] = self.__covariance[i][j] / (
+                        (self.__covariance[i][i] * self.__covariance[j][j]) ** 0.5
+                    )
+            self.__cache_rho = rho
+
+        return self.__cache_rho
+
+    @property  # Displayed
+    def corelation(self):
+        return pd.DataFrame(
+            self.__corelation,
+            index=self.covariance.index,
+            columns=self.covariance.columns,
+        )
+
+    ###########################
     # Mutual information matrix
     @property  # Core
     def __MI(self):
@@ -446,9 +457,7 @@ class model:
             MI = np.zeros(shape=self.covariance.shape)
             for i in range(MI.shape[0]):
                 for j in range(MI.shape[1]):
-                    MI[i][j] = self.__entropy_joint[i][j] - (
-                        self.__entropy[i] + self.__entropy[j]
-                    )
+                    MI[i][j] = -0.5 * np.log(1 - self.__corelation[i][j] ** 2)
             self.__cache_MI = MI
 
         return self.__cache_MI
@@ -489,9 +498,12 @@ class model:
             self.__cache_R_s_c = None
             self.__cache_R_v_p = None
 
+        self.__cache_Link_matrix = None
+        self.__cache_Reduced_Stoichio_matrix = None
         self.__cache_cov = None
         self.__cache_h = None
         self.__cache_joint_h = None
+        self.__cache_rho = None
         self.__cache_MI = None
         self.__cache_conditional_h = None
 
@@ -614,6 +626,130 @@ class model:
         return pd.DataFrame(rho, index=Cov_df.index, columns=Cov_df.columns)
 
     #################################################################################
+    #########    Function that return the entropy of group of variable   ############
+    def entropy_group(self, groups=[]):
+        ### Description of the fonction
+        """
+        Fonction to compute the entropy of group of variable (joint entropy)
+
+        groups : a list or a dictionnary contenning a list of string of the variables/parameter to regroup
+
+        if groups = [] (by defalut) we take all variables/parameters indivudually
+        """
+        # Line to deal with the ./0 case
+        np.seterr(divide="ignore", invalid="ignore")
+
+        Cov_df = self.covariance
+        Cov = Cov_df.to_numpy()
+
+        # If the groups variables is empty, we return the entropy of every single variables and parameters
+        if groups == []:
+            return self.entropy
+
+        # Else it means that we study a group of variable
+        # If groups is a list, we transform it into a dictionnary
+        elif type(groups) == list:
+            dictionnary = {}
+            for i, group in enumerate(groups):
+                dictionnary[f"group_{i}"] = group
+
+        elif type(groups) == dictionnary:
+            dictionnary = groups
+
+        # First we make sure that every variables in the list of list is well in the covarience matrix
+        # For every group
+        for key in dictionnary.keys():
+            group = dictionnary[key]
+            # for every variables of a group
+            for variable in group:
+                # if the variable is not in the model, we raise an error
+                if variable not in Cov_df.index:
+                    raise NameError(
+                        f"The variables {variable} is not in the covariance matrix !"
+                    )
+
+        # Initialisation of the MI matrix
+        entropy = pd.DataFrame(
+            index=dictionnary.keys(), columns=["Entropy"], dtype=float
+        )
+
+        # For each group (= key of dictionnary)
+        for key in dictionnary.keys():
+            group = dictionnary[key]
+            # We recreate a smaller covariance matrice with only the element of the group
+            Cov = Cov_df.loc[group, group].to_numpy()
+
+            entropy.at[key, "Entropy"] = (len(Cov) / 2) * np.log(
+                2 * np.pi * np.e
+            ) + 0.5 * np.log(np.linalg.det(Cov))
+
+        # Line to retablish the warning
+        np.seterr(divide="warn", invalid="warn")
+
+        return entropy
+
+    ###############################################################################################
+    #######    Function that return the joint entropy matrix for a group of variable   ############
+    def joint_entropy_group(self, groups=[]):
+        ### Description of the fonction
+        """
+        Fonction to compute the joint entropy of a group of variable
+
+        groups : a list or a dictionnary contenning a list of string of the variables/parameter to regroup
+
+        if groups = [] (by defalut) we take all variables/parameters indivudually
+        """
+        # Line to deal with the ./0 case
+        np.seterr(divide="ignore", invalid="ignore")
+
+        Cov_df = self.covariance
+        Cov = Cov_df.to_numpy()
+
+        # If the groups variables is empty, we return the joint entropy matrix of every single variables and parameters
+        if groups == []:
+            return self.joint_entropy
+
+        # Else it mean that we study a group of variable
+        elif type(groups) == list:
+            dictionnary = {}
+            for i, group in enumerate(groups):
+                dictionnary[str(i)] = group
+
+        elif type(groups) == dictionnary:
+            dictionnary = groups
+
+        # First we make sure that every variables in the list of list is well in the covarience matrix
+        for key in dictionnary.keys():
+            group = dictionnary[key]
+            for variable in group:
+                if variable not in Cov_df.index:
+                    raise NameError(
+                        f"The variables {variable} is not in the covariance matrix !"
+                    )
+
+        # Initialisation of the MI matrix
+        joint_entropy = pd.DataFrame(
+            index=dictionnary.keys(), columns=dictionnary.keys(), dtype=float
+        )
+
+        for key1 in dictionnary.keys():
+            for key2 in dictionnary.keys():
+                # extraction of the list of string
+                group1 = dictionnary[key1]
+                group2 = dictionnary[key2]
+
+                Cov = Cov_df.loc[group1 + group2, group1 + group2].to_numpy()
+
+                joint_entropy.at[key1, key2] = (
+                    len(group1) + len(group2) / 2
+                ) ** np.log(2 * np.pi * np.e) + 0.5 * np.log(np.linalg.det(Cov))
+
+        # Line to retablish the warning
+        np.seterr(divide="warn", invalid="warn")
+
+        return joint_entropy
+
+    #################################################################################
     ############    Function that return the Mutual Inforamtion matrix   ############
     def MI_group(self, groups=[]):
         ### Description of the fonction
@@ -632,19 +768,7 @@ class model:
 
         # If the groups variables is empty, we return the mutual information of every single variables and parameters
         if groups == []:
-            MI = np.zeros(Cov.shape)
-
-            for i in range(Cov.shape[0]):
-                for j in range(Cov.shape[1]):
-                    numerator = Cov[i][i] * Cov[j][j] - Cov[i][j] * Cov[j][i]
-                    denominator = Cov[i][i] * Cov[j][j]
-                    if (numerator / denominator <= 0) or denominator == 0:
-                        MI[i][j] = np.inf
-
-                    else:
-                        MI[i][j] = 0.5 * np.log(numerator / denominator)
-
-            return pd.DataFrame(MI, index=Cov_df.index, columns=Cov_df.columns)
+            return self.MI
 
         # Else it mean that we study a group of variable
         elif type(groups) == list:

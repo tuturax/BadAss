@@ -10,9 +10,9 @@ import pandas as pd
 class Reaction_class:
     #############################################################################
     #############             Initialisation                #####################
-    def __init__(self, class_model_instance):
+    def __init__(self, class_MODEL_instance):
         # Private attribute for the instance of the Main class
-        self.__class_model_instance = class_model_instance
+        self.__class_MODEL_instance = class_MODEL_instance
 
         self.df = pd.DataFrame(
             columns=["Metabolites", "Equilibrium constant", "Law", "Flux (mmol/gDW/h)"]
@@ -65,22 +65,22 @@ class Reaction_class:
             self.df.loc[name] = [metabolites, k_eq, law, flux]
 
             # Add a null columns to the stoichio matrix N
-            if name not in self.__class_model_instance.Stoichio_matrix.columns:
-                self.__class_model_instance.Stoichio_matrix[name] = 0.0
+            if name not in self.__class_MODEL_instance.Stoichio_matrix.columns:
+                self.__class_MODEL_instance.Stoichio_matrix[name] = 0.0
 
             for meta in list(metabolites.keys()):
-                if meta not in self.__class_model_instance.Stoichio_matrix.index:
+                if meta not in self.__class_MODEL_instance.Stoichio_matrix.index:
                     # If the metabolite is not in the model, we add it
-                    self.__class_model_instance.metabolites.add(meta)
+                    self.__class_MODEL_instance.metabolites.add(meta)
 
                 # Then we add the correct stoichiometric coefficients
-                self.__class_model_instance.Stoichio_matrix.at[meta, name] = self.df.at[
+                self.__class_MODEL_instance.Stoichio_matrix.at[meta, name] = self.df.at[
                     name, "Metabolites"
                 ][meta]
 
             # Updating the network
-            self.__class_model_instance._update_network()
-            self.__class_model_instance._update_elasticity()
+            self.__class_MODEL_instance._update_network()
+            self.__class_MODEL_instance._update_elasticity()
 
     #################################################################################
     #########           Fonction to change a reaction                      ##########
@@ -131,15 +131,15 @@ class Reaction_class:
             self.df.drop(name, inplace=True)
 
             # For a reaction in the stoichiometric matrix
-            for reaction in self.__class_model_instance.Stoichio_matrix.columns:
+            for reaction in self.__class_MODEL_instance.Stoichio_matrix.columns:
                 # If the the reaction is not in the modified reaction dataframe => it was deleted
                 if reaction not in self.df.index:
-                    self.__class_model_instance.Stoichio_matrix.drop(
+                    self.__class_MODEL_instance.Stoichio_matrix.drop(
                         reaction, axis=1, inplace=True
                     )
 
             # Updating the network
-            self.__class_model_instance._update_network
+            self.__class_MODEL_instance._update_network
 
     #################################################################################
     #########           Fonction to add a reaction                         ##########
@@ -177,6 +177,6 @@ class Reaction_class:
 
             # We check the stoichiometric coefficient link to this reaction in order to automatically add them to the matrix
             for meta in list(self.df.loc[name, "Metabolites"].keys()):
-                if meta not in self.__class_model_instance.Stoichio_matrix.index:
+                if meta not in self.__class_MODEL_instance.Stoichio_matrix.index:
                     # If the metabolite is not in the model, we add it
-                    self.__class_model_instance.metabolites._update(meta)
+                    self.__class_MODEL_instance.metabolites._update(meta)
