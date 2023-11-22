@@ -627,7 +627,7 @@ class MODEL:
 
     #################################################################################
     #########    Function that return the entropy of group of variable   ############
-    def entropy_group(self, groups=[]):
+    def group_entropy(self, groups=[]):
         ### Description of the fonction
         """
         Fonction to compute the entropy of group of variable (joint entropy)
@@ -690,7 +690,7 @@ class MODEL:
 
     ###############################################################################################
     #######    Function that return the joint entropy matrix for a group of variable   ############
-    def joint_entropy_group(self, groups=[]):
+    def group_joint_entropy(self, groups=[]):
         ### Description of the fonction
         """
         Fonction to compute the joint entropy of a group of variable
@@ -751,7 +751,7 @@ class MODEL:
 
     #################################################################################
     ############    Function that return the Mutual Inforamtion matrix   ############
-    def MI_group(self, groups=[]):
+    def group_MI(self, groups=[]):
         ### Description of the fonction
         """
         Fonction to compute the Mutual information
@@ -803,7 +803,7 @@ class MODEL:
                 Cov_2 = Cov_df.loc[group2, group2].to_numpy()
                 Cov_3 = Cov_df.loc[group1 + group2, group1 + group2].to_numpy()
 
-                MI.loc[key1, key2] = (1 / (2 * np.log(2))) * np.log(
+                MI.loc[key1, key2] = 0.5 * np.log(
                     np.linalg.det(Cov_1) * np.linalg.det(Cov_2) / np.linalg.det(Cov_3)
                 )
 
@@ -1101,7 +1101,7 @@ class MODEL:
         result = result.lower()
 
         if result == "mi" or result == "mutual information":
-            data_frame = self.MI_group()
+            data_frame = self.group_MI()
         elif result == "rho" or result == "correlation":
             data_frame = self.rho()
         elif result == "cov" or result == "covariance":
