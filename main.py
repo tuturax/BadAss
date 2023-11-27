@@ -749,6 +749,81 @@ class MODEL:
 
         return joint_entropy
 
+    ###############################################################################################
+    #######    Function that return the joint entropy matrix for a group of variable   ############
+    def group_conditional_entropy(self, groups=[]):
+        ### Description of the fonction
+        """
+        Fonction to compute the conditional entropy of a group of variable
+
+        groups : a list or a dictionnary contenning a list of string of the variables/parameter to regroup
+
+        if groups = [] (by defalut) we take all variables/parameters indivudually
+        """
+        # Line to deal with the ./0 case
+        np.seterr(divide="ignore", invalid="ignore")
+
+        Cov_df = self.covariance
+        Cov = Cov_df.to_numpy()
+
+        # If the groups variables is empty, we return the joint entropy matrix of every single variables and parameters
+        if groups == []:
+            return self.entropy_conditional
+
+        # Else it mean that we study a group of variable
+        elif type(groups) == list:
+            dictionnary = {}
+            for i, group in enumerate(groups):
+                dictionnary[str(i)] = group
+
+        elif type(groups) == dictionnary:
+            dictionnary = groups
+
+        # First we make sure that every variables in the list of list is well in the covarience matrix
+        for key in dictionnary.keys():
+            group = dictionnary[key]
+            for variable in group:
+                if variable not in Cov_df.index:
+                    raise NameError(
+                        f"The variables {variable} is not in the covariance matrix !"
+                    )
+
+        # Initialisation of the MI matrix
+        conditional_entropy = pd.DataFrame(
+            index=dictionnary.keys(), columns=dictionnary.keys(), dtype=float
+        )
+
+        for key1 in dictionnary.keys():
+            for key2 in dictionnary.keys():
+                # extraction of the list of string
+                group1 = dictionnary[key1]
+                group2 = dictionnary[key2]
+
+                # Creating the sub_covariance matrix
+                Cov1 = Cov_df.loc[group1, group1].to_numpy()
+                Cov2 = Cov_df.loc[group2, group2].to_numpy()
+                # And the big one
+                Cov = Cov_df.loc[group1 + group2, group1 + group2].to_numpy()
+
+                conditional_entropy.at[key1, key2] = (
+                    len(Cov) / 2 * np.log(2 * np.pi * np.e)
+                    + 0.5 * np.log(np.linalg.det(Cov))
+                    - len(Cov1) / 2 * np.log(2 * np.pi * np.e)
+                    + 0.5 * np.log(np.linalg.det(Cov1))
+                )
+
+                conditional_entropy.at[key2, key1] = (
+                    len(Cov) / 2 * np.log(2 * np.pi * np.e)
+                    + 0.5 * np.log(np.linalg.det(Cov))
+                    - len(Cov2) / 2 * np.log(2 * np.pi * np.e)
+                    + 0.5 * np.log(np.linalg.det(Cov2))
+                )
+
+        # Line to retablish the warning
+        np.seterr(divide="warn", invalid="warn")
+
+        return conditional_entropy
+
     #################################################################################
     ############    Function that return the Mutual Inforamtion matrix   ############
     def group_MI(self, groups=[]):
