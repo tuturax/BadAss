@@ -93,9 +93,28 @@ class Metabolite_class:
 
         else:
             if external != None:
-                self.df.at[name, "External"] = external
+                if type(external) != bool:
+                    raise TypeError(
+                        f"The input variable '{external}' is a type '{type(external)}', a boolean True/False is expected for the argument 'External' !"
+                    )
+                else:
+                    # If it was internal and become external => we remove it from the elasticity matrix
+                    self.df.at[name, "External"] = external
+                    self.__class_MODEL_instance._update_elasticity()
+
             if concentration != None:
-                self.df.at[name, "Concentration (mmol/gDW)"] = concentration
+                if isinstance(concentration, (int, float, complex)):
+                    if concentration < 0:
+                        raise ValueError(
+                            f"The value of the input '{concentration}' must be greater than 0 !"
+                        )
+                    else:
+                        self.df.at[name, "Concentration (mmol/gDW)"] = concentration
+
+                else:
+                    raise TypeError(
+                        f"The input variable '{concentration}' is a type '{type(concentration)}', a value is expected for the argument 'concentration' !"
+                    )
 
     #################################################################################
     #########           Fonction to remove a metabolite                    ##########

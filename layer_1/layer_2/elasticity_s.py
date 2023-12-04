@@ -51,7 +51,7 @@ class Sub_Elasticity_class:
         if type(matrix) == type(np.ndarray([])):
             if matrix.shape != self.df.shape:
                 raise IndexError(
-                    "The shape of your matrix isn't matching with the elasticity matrix"
+                    "The shape of your input matrix isn't matching with the elasticity matrix"
                 )
             else:
                 self._df.values[:] = matrix
@@ -91,7 +91,7 @@ class Sub_Elasticity_class:
         Method to attribute to the E_s matrix the value of a half-satured enzyme
         """
         self.reset()
-        self._df = -0.5 * self.__class_MODEL_instance.Stoichio_matrix.transpose()
+        self._df = -0.5 * self.__class_MODEL_instance.N_without_ext.transpose()
 
     #################################################################################
     #########        Fonction to change a coefficient of the matrix        ##########

@@ -81,6 +81,28 @@ class MODEL:
         return self.Stoichio_matrix.to_numpy()
 
     @property
+    def N(self):
+        return self.Stoichio_matrix
+
+    @property
+    def __N(self):
+        return self.__Stoichio_matrix
+
+    @property
+    def N_without_ext(self):
+        N = self.N
+        # We check if every metabolite is external
+        for meta in self.Stoichio_matrix.index:
+            if self.metabolites.df.at[meta, "External"] == True:
+                # And remove this metabolite from the local stoichio matrix N
+                N = N.drop(meta)
+        return N
+
+    @property
+    def __N_without_ext(self):
+        return self.N_without_ext.to_numpy()
+
+    @property
     def reactions(self):
         return self.__reactions
 
@@ -107,49 +129,32 @@ class MODEL:
     @property
     def Link_matrix(self):
         # If the value isn't None, return the cache value
-        if self.__cache_Link_matrix is not None and (
-            self.__cache_Link_matrix.shape[0] != self.__Stoichio_matrix.shape[0]
-            or self.__cache_Reduced_Stoichio_matrix.shape[1]
-            != self.__Stoichio_matrix.shape[1]
-        ):
-            return (self.__cache_Link_matrix, self.__cache_Reduced_Stoichio_matrix)
+        if self.__cache_Link_matrix is None:
+            # Definition of a local stoichio matrix that will change gradually in the property
+            N = self.N_without_ext
+            # .copy() ?
 
-        # Definition of a local stoichio matrix that will change gradually in the property
-        N = self.Stoichio_matrix
-        # .copy() ?
+            # Else we take a look to the dependent row of the stoichio matrix
+            dependent_rows = []
+            independent_rows = []
 
-        # Else we take a look to the dependent row of the stoichio matrix
-        dependent_rows = []
-        independent_rows = []
+            _, independent = sympy.Matrix(N.to_numpy()).T.rref()
 
-        ext_meta_are_dependent = False
-
-        # Case where we remove we considere the external metabolite has dependent !
-        if ext_meta_are_dependent == True:
-            # First, we can remove the external metabolite
-            for meta in self.Stoichio_matrix.index:
-                if self.metabolites.df.at[meta, "External"] == True:
-                    # We add the external metabolite in the list of dependent row
+            for i, meta in enumerate(N.index):
+                if i in independent:
+                    independent_rows.append(meta)
+                else:
                     dependent_rows.append(meta)
-                    # And remove this metabolite from the local stoichio matrix N
-                    N = N.drop(meta)
 
-        _, independent = sympy.Matrix(N.to_numpy()).T.rref()
+            # Build of the reduced stoichio matrix
+            Nr = N.loc[independent_rows]
 
-        for i, meta in enumerate(N.index):
-            if i in independent:
-                independent_rows.append(meta)
-            else:
-                dependent_rows.append(meta)
+            # Then we deduce the link matrix L from Nr and N
+            L = np.dot(N.to_numpy(), np.linalg.pinv(Nr.to_numpy()))
+            L.dtype = np.float64
 
-        # Build of the reduced stoichio matrix
-        Nr = N.loc[independent_rows]
-
-        # Then we deduce the link matrix L from Nr and N
-        L = np.dot(self.Stoichio_matrix.to_numpy(), np.linalg.inv(Nr.to_numpy()))
-
-        self.__cache_Link_matrix = L
-        self.__cache_Reduced_Stoichio_matrix = Nr
+            self.__cache_Link_matrix = L
+            self.__cache_Reduced_Stoichio_matrix = Nr
 
         return (self.__cache_Link_matrix, self.__cache_Reduced_Stoichio_matrix)
 
@@ -223,9 +228,11 @@ class MODEL:
 
     @property  # Displayed
     def R_s_p(self):
+        # We only add the internal metabolite
+        index_meta = self.elasticity.s.df.columns.to_list()
         return pd.DataFrame(
             self.__R_s_p,
-            index=self.metabolites.df.index,
+            index=index_meta,
             columns=self.parameters.df.index,
         )
 
@@ -234,7 +241,7 @@ class MODEL:
     def __R_v_p(self):
         if self.__cache_R_v_p is None:
             self.__cache_R_v_p = (
-                np.dot(self.elasticity.s.df.to_numpy(), self.__R_s_p)
+                np.dot(self.elasticity.s.df, self.__R_s_p)
                 + self.elasticity.p.df.to_numpy()
             )
 
@@ -244,7 +251,7 @@ class MODEL:
     def R_v_p(self):
         return pd.DataFrame(
             self.__R_v_p,
-            index=self.reactions.df.index,
+            index=self.elasticity.s.df.index,
             columns=self.parameters.df.index,
         )
 
@@ -261,9 +268,15 @@ class MODEL:
 
     @property  # Displayed
     def R_s_c(self):
+        # We only add the internal metabolite
+        index_meta = []
+        for meta in self.metabolites.df.index:
+            if self.metabolites.df.at[meta, "External"] == False:
+                index_meta.append(meta)
+
         return pd.DataFrame(
             self.__R_s_c,
-            index=self.metabolites.df.index,
+            index=index_meta,
             columns=self.metabolites.df.index,
         )
 
@@ -292,10 +305,13 @@ class MODEL:
 
     @property  # Displayed
     def R(self):
+        # We only add the internal metabolite
+        index_meta = self.R_s_p.index.to_list()
+        index_flux = self.R_v_p.index.to_list()
+
         return pd.DataFrame(
             self.__R,
-            index=self.metabolites.df.index.to_list()
-            + self.reactions.df.index.to_list(),
+            index=index_meta + index_flux,
             columns=self.parameters.df.index,
         )
 
@@ -339,16 +355,8 @@ class MODEL:
         # Return the dataframe of the covariance matrix by a call of it
         return pd.DataFrame(
             self.__covariance,
-            index=(
-                self.parameters.df.index.to_list()
-                + self.metabolites.df.index.to_list()
-                + self.reactions.df.index.to_list()
-            ),
-            columns=(
-                self.parameters.df.index.to_list()
-                + self.metabolites.df.index.to_list()
-                + self.reactions.df.index.to_list()
-            ),
+            index=(self.R.columns.to_list() + self.R.index.to_list()),
+            columns=(self.R.columns.to_list() + self.R.index.to_list()),
         )
 
     ################
@@ -359,11 +367,8 @@ class MODEL:
             vec_h = []
             for index in self.covariance.index:
                 vec_h.append(
-                    0.5
-                    * (
-                        np.log(2 * np.pi * np.exp(1))
-                        + np.log(self.covariance.at[index, index])
-                    )
+                    0.5 * np.log(2 * np.pi * np.e * self.covariance.at[index, index])
+                    + 0.5
                 )
 
             self.__cache_h = vec_h
@@ -385,11 +390,11 @@ class MODEL:
             joint_h = np.zeros(Cov.shape)
             for i in range(Cov.shape[0]):
                 for j in range(Cov.shape[1]):
-                    if Cov[i][i] * Cov[j][j] - Cov[i][j] * Cov[j][i] <= 0:
+                    if Cov[i][i] * Cov[j][j] - Cov[i][j] * Cov[j][i] <= 1e-16:
                         joint_h[i][j] = np.inf
 
                     else:
-                        joint_h[i][j] = np.log(2 * np.pi * np.exp(1)) + 0.5 * np.log(
+                        joint_h[i][j] = np.log(2 * np.pi * np.e) + 0.5 * np.log(
                             Cov[i][i] * Cov[j][j] - Cov[i][j] * Cov[j][i]
                         )
 
@@ -568,8 +573,20 @@ class MODEL:
 
         if session.lower() == "e_s":
             for meta in self.metabolites.df.index:
-                if meta not in self.elasticity.s.df.columns:
+                # If the metabolilte isn't in the model AND  is not external => we add it to the elasticity matrix
+                if (
+                    meta not in self.elasticity.s.df.columns
+                    and self.metabolites.df.at[meta, "External"] == False
+                ):
                     self.elasticity.s.df[meta] = [0 for i in range(n_reaction)]
+
+                # Else, if the metabolite is in the model AND is external => we remove it from the elasticity matrix
+                elif (
+                    meta in self.elasticity.s.df.columns
+                    and self.metabolites.df.at[meta, "External"] == True
+                ):
+                    self.elasticity.s.df.drop(columns=meta, inplace=True)
+
             # Pandas doesn't allow to add line before at least 1 column is add
             if self.elasticity.s.df.columns.size != 0:
                 for reaction in self.reactions.df.index:
@@ -886,6 +903,97 @@ class MODEL:
         np.seterr(divide="warn", invalid="warn")
 
         return MI
+
+    #################################################################################
+    ############    Function that return the Mutual Inforamtion matrix   ############
+    def group_entropy_fixed_vector(self, groups=[], fixed_vector=[]):
+        ### Description of the fonction
+        """
+        Fonction to compute the entropy of a group when a vector parameter is fixed
+
+        groups : a list or a dictionnary contenning a list of string of the variables/parameter to regroup
+
+        if groups = [] (by defalut) we take all variables/parameters indivudually
+        """
+        # Line to deal with the ./0 case
+        np.seterr(divide="ignore", invalid="ignore")
+
+        Cov_df = self.covariance
+        Cov = Cov_df.to_numpy()
+
+        # If the groups variables is empty, we return the mutual information of every single variables and parameters
+        if groups == [] and fixed_vector == []:
+            groups = [[]]
+            fixed_vector = [[]]
+            for index in self.covariance.index:
+                groups[0].append(index)
+                fixed_vector[0].append(index)
+
+        # dictionnary_r : the variable the we will study the entropy
+        # dictionnary_f : the fixed variable
+
+        # Then we check the type of the arguments of the function and transform them a dict
+        if type(groups) == list:
+            dictionnary_r = {}
+            for i, group in enumerate(groups):
+                dictionnary_r[str(i)] = group
+
+        if type(groups) == dict:
+            dictionnary_r = groups
+
+        if type(groups) == list:
+            dictionnary_f = {}
+            for i, group in enumerate(fixed_vector):
+                dictionnary_f[str(i)] = group
+
+        if type(groups) == dict:
+            dictionnary_f = groups
+
+        # First we make sure that every variables in the list of list is well in the covarience matrix
+        for key in dictionnary_r.keys():
+            group = dictionnary_r[key]
+            for variable in group:
+                if variable not in Cov_df.index:
+                    raise NameError(
+                        f"The variables {variable} in the group argument is not in the covariance matrix !"
+                    )
+
+        for key in dictionnary_f.keys():
+            group = dictionnary_f[key]
+            for variable in group:
+                if variable not in Cov_df.index:
+                    raise NameError(
+                        f"The variables {variable} in the fixed vector argument is not in the covariance matrix !"
+                    )
+
+        # Initialisation of the MI matrix
+        entropy = pd.DataFrame(
+            index=dictionnary_r.keys(), columns=dictionnary_f.keys(), dtype=float
+        )
+
+        for key1 in dictionnary_r.keys():
+            for key2 in dictionnary_f.keys():
+                # extraction of the list of string
+                group_r = dictionnary_r[key1]
+                group_f = dictionnary_f[key2]
+
+                Cov_rr = Cov_df.loc[group_r, group_r].to_numpy()
+                Cov_ff = Cov_df.loc[group_f, group_f].to_numpy()
+                Cov_rf = Cov_df.loc[group_r, group_f].to_numpy()
+                Cov_fr = Cov_rf.T
+                # Return the conditional cov matrix / mean
+                entropy.at[key1, key2] = len(Cov_rr) / 2 * np.log(
+                    2 * np.pi * np.e
+                ) + np.log(
+                    np.linalg.det(
+                        Cov_rr - np.dot(Cov_rf, np.dot(np.linalg.inv(Cov_ff), Cov_fr))
+                    )
+                )
+
+        # Line to retablish the warning
+        np.seterr(divide="warn", invalid="warn")
+
+        return entropy
 
     #################################################################################
     ############    Function that return the Mutual Inforamtion matrix   ############
