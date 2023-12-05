@@ -856,7 +856,6 @@ class MODEL:
         np.seterr(divide="ignore", invalid="ignore")
 
         Cov_df = self.covariance
-        Cov = Cov_df.to_numpy()
 
         # If the groups variables is empty, we return the mutual information of every single variables and parameters
         if groups == []:
@@ -906,28 +905,69 @@ class MODEL:
 
     #################################################################################
     ############    Function that return the Mutual Inforamtion matrix   ############
-    def group_entropy_fixed_vector(self, groups=[], fixed_vector=[]):
+    def group_entropy_fixed_vector(
+        self,
+        groups=[],
+        fixed_elements=[],
+        new_mean_vector=[],
+        return_Cov_and_mean=False,
+    ):
         ### Description of the fonction
         """
         Fonction to compute the entropy of a group when a vector parameter is fixed
 
-        groups : a list or a dictionnary contenning a list of string of the variables/parameter to regroup
+        groups : a list of list or a dictionnary contenning a list of string of the variables/parameter to regroup for the study
+        fixed_elements : a list of list or a dictionnary contenning a list of string of the variables/parameter to fix
+        new_mean_vector : a list of list or a dictionnary contenning a list of the new mean of the fixed vector
 
         if groups = [] (by defalut) we take all variables/parameters indivudually
         """
         # Line to deal with the ./0 case
         np.seterr(divide="ignore", invalid="ignore")
 
-        Cov_df = self.covariance
-        Cov = Cov_df.to_numpy()
+        # Just the initialisation of locals variables to taking into acount the well computation of the default case
+        groups_is_all = False
+        groups_is_all = False
 
-        # If the groups variables is empty, we return the mutual information of every single variables and parameters
-        if groups == [] and fixed_vector == []:
+        # Take the covariance matrix as local variable to avoid a lot of function call.
+        Cov_df = self.covariance
+
+        # local function to extract the mean from the model by the name of the element fo the model
+        def mean_in_the_model(name):
+            if name in self.metabolites.df.index:
+                return self.metabolites.df.at[name, "Concentration (mmol/gDW)"]
+            elif name in self.reactions.df.index:
+                return self.reactions.df.at[name, "Flux (mmol/gDW/h)"]
+            elif name in self.parameters.df.index:
+                return self.parameters.df.at[name, "Mean values"]
+            else:
+                raise NameError(
+                    f"The input name '{name}' in the 'fixed_vector' argument is not in the metabolite, reactions or parameters dataframe !"
+                )
+
+        # If the groups variables is empty (by default), we study every single variables and parameters
+        if groups == []:
+            groups_is_all = True
             groups = [[]]
-            fixed_vector = [[]]
             for index in self.covariance.index:
                 groups[0].append(index)
-                fixed_vector[0].append(index)
+
+        # If we just take as input a list of str, we just transform it into a list of list
+        elif type(groups) == list and type(group[0]) == str:
+            groups = [groups]
+
+        # If the fixed_elements list is empty (by default), we fix every single variables and parameters
+        if fixed_elements == []:
+            fixed_is_all = True
+            fixed_elements = [[]]
+            old_mean_vector = [[]]
+            for index in self.covariance.index:
+                fixed_elements[0].append(index)
+                old_mean_vector[0].append(mean_in_the_model(index))
+
+        # If we just take as input a list of str, we just transform it into a list of list
+        elif type(fixed_elements) == list and type(fixed_elements[0]) == str:
+            fixed_elements = [fixed_elements]
 
         # dictionnary_r : the variable the we will study the entropy
         # dictionnary_f : the fixed variable
@@ -943,7 +983,7 @@ class MODEL:
 
         if type(groups) == list:
             dictionnary_f = {}
-            for i, group in enumerate(fixed_vector):
+            for i, group in enumerate(fixed_elements):
                 dictionnary_f[str(i)] = group
 
         if type(groups) == dict:
@@ -977,18 +1017,22 @@ class MODEL:
                 group_r = dictionnary_r[key1]
                 group_f = dictionnary_f[key2]
 
+                # We create intermediate matrix
                 Cov_rr = Cov_df.loc[group_r, group_r].to_numpy()
                 Cov_ff = Cov_df.loc[group_f, group_f].to_numpy()
                 Cov_rf = Cov_df.loc[group_r, group_f].to_numpy()
                 Cov_fr = Cov_rf.T
+
+                # The targeted covariance matrix
+                Cov_rr_f = Cov_rr - np.dot(
+                    Cov_rf, np.dot(np.linalg.inv(Cov_ff), Cov_fr)
+                )
                 # Return the conditional cov matrix / mean
                 entropy.at[key1, key2] = len(Cov_rr) / 2 * np.log(
                     2 * np.pi * np.e
-                ) + np.log(
-                    np.linalg.det(
-                        Cov_rr - np.dot(Cov_rf, np.dot(np.linalg.inv(Cov_ff), Cov_fr))
-                    )
-                )
+                ) + np.log(np.linalg.det(Cov_rr_f))
+
+                # Mean aspect
 
         # Line to retablish the warning
         np.seterr(divide="warn", invalid="warn")
