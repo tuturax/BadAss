@@ -907,7 +907,7 @@ class MODEL:
     ############    Function that return the Mutual Inforamtion matrix   ############
     def group_entropy_fixed_vector(
         self,
-        groups=[],
+        groups_to_study=[],
         fixed_elements=[],
         new_mean_vector=[],
         return_Cov_and_mean=False,
@@ -946,76 +946,96 @@ class MODEL:
                 )
 
         # If the groups variables is empty (by default), we study every single variables and parameters
-        if groups == []:
+        if groups_to_study == []:
             groups_is_all = True
-            groups = [[]]
+            groups_to_study = [[]]
             for index in self.covariance.index:
-                groups[0].append(index)
+                groups_to_study[0].append(index)
 
         # If we just take as input a list of str, we just transform it into a list of list
-        elif type(groups) == list and type(group[0]) == str:
-            groups = [groups]
+        elif type(groups_to_study) == list and type(groups_to_study[0]) == str:
+            groups_to_study = [groups_to_study]
 
         # If the fixed_elements list is empty (by default), we fix every single variables and parameters
         if fixed_elements == []:
             fixed_is_all = True
             fixed_elements = [[]]
-            old_mean_vector = [[]]
             for index in self.covariance.index:
                 fixed_elements[0].append(index)
-                old_mean_vector[0].append(mean_in_the_model(index))
 
         # If we just take as input a list of str, we just transform it into a list of list
         elif type(fixed_elements) == list and type(fixed_elements[0]) == str:
             fixed_elements = [fixed_elements]
 
+        # Then we fill a list that contnaing the old value of mean
+        old_mean_vector = [[]]
+        for i in range(len(fixed_elements)):
+            for element in fixed_elements[i]:
+                old_mean_vector[i].append(mean_in_the_model(element))
+
+        if new_mean_vector == [] or new_mean_vector == [[]]:
+            new_mean_vector = old_mean_vector
+
+        elif type(new_mean_vector) == list and type(new_mean_vector[0]) != list:
+            new_mean_vector = [new_mean_vector]
+
+        if len(new_mean_vector) != len(fixed_elements):
+            raise ValueError(
+                f"The total group of the arguments 'fixed_elements' and 'new_mean_vector' isn't matching, {len(fixed_elements)} VS {len(new_mean_vector)} !"
+            )
+
         # dictionnary_r : the variable the we will study the entropy
         # dictionnary_f : the fixed variable
 
-        # Then we check the type of the arguments of the function and transform them a dict
-        if type(groups) == list:
-            dictionnary_r = {}
-            for i, group in enumerate(groups):
-                dictionnary_r[str(i)] = group
+        # Creating a local function to check the type of the arguments and transform them a dict if it not the case
+        def list_to_dict(groups):
+            if isinstance(groups, list):
+                dictionnary = {}
+                for i, group in enumerate(groups):
+                    dictionnary[str(i)] = group
 
-        if type(groups) == dict:
-            dictionnary_r = groups
+            elif isinstance(groups, list) == dict:
+                dictionnary = groups
 
-        if type(groups) == list:
-            dictionnary_f = {}
-            for i, group in enumerate(fixed_elements):
-                dictionnary_f[str(i)] = group
+            return dictionnary
 
-        if type(groups) == dict:
-            dictionnary_f = groups
+        dictionary_r = list_to_dict(groups_to_study)
+        dictionary_f = list_to_dict(fixed_elements)
+
+        # Transforming the potential list of value in into dictionary to
+        if isinstance(old_mean_vector, list):
+            old_mean_vector = dict(zip(dictionary_f.keys(), old_mean_vector))
+        if isinstance(new_mean_vector, list):
+            new_mean_vector = dict(zip(dictionary_f.keys(), new_mean_vector))
 
         # First we make sure that every variables in the list of list is well in the covarience matrix
-        for key in dictionnary_r.keys():
-            group = dictionnary_r[key]
+        for key in dictionary_r.keys():
+            group = dictionary_r[key]
             for variable in group:
                 if variable not in Cov_df.index:
                     raise NameError(
-                        f"The variables {variable} in the group argument is not in the covariance matrix !"
+                        f"The variable '{variable}' in the group argument is not in the covariance matrix !"
                     )
 
-        for key in dictionnary_f.keys():
-            group = dictionnary_f[key]
+        for key in dictionary_f.keys():
+            group = dictionary_f[key]
             for variable in group:
                 if variable not in Cov_df.index:
                     raise NameError(
-                        f"The variables {variable} in the fixed vector argument is not in the covariance matrix !"
+                        f"The variable '{variable}' in the fixed vector argument is not in the covariance matrix !"
                     )
 
         # Initialisation of the MI matrix
         entropy = pd.DataFrame(
-            index=dictionnary_r.keys(), columns=dictionnary_f.keys(), dtype=float
+            index=dictionary_r.keys(), columns=dictionary_f.keys(), dtype=float
         )
+        new_Cov = new_mean = dictionary_r
 
-        for key1 in dictionnary_r.keys():
-            for key2 in dictionnary_f.keys():
+        for key1 in dictionary_r.keys():
+            for key2 in dictionary_f.keys():
                 # extraction of the list of string
-                group_r = dictionnary_r[key1]
-                group_f = dictionnary_f[key2]
+                group_r = dictionary_r[key1]
+                group_f = dictionary_f[key2]
 
                 # We create intermediate matrix
                 Cov_rr = Cov_df.loc[group_r, group_r].to_numpy()
@@ -1027,17 +1047,27 @@ class MODEL:
                 Cov_rr_f = Cov_rr - np.dot(
                     Cov_rf, np.dot(np.linalg.inv(Cov_ff), Cov_fr)
                 )
+                new_Cov[key1] = Cov_rr_f
+
                 # Return the conditional cov matrix / mean
                 entropy.at[key1, key2] = len(Cov_rr) / 2 * np.log(
                     2 * np.pi * np.e
                 ) + np.log(np.linalg.det(Cov_rr_f))
 
                 # Mean aspect
+                x_f = np.array(new_mean_vector[key2])
+                mu_f = np.array(old_mean_vector[key2])
+                new_mean[key1] = np.dot(
+                    np.dot(Cov_rf, np.linalg.inv(Cov_ff)), (x_f - mu_f)
+                )
 
         # Line to retablish the warning
         np.seterr(divide="warn", invalid="warn")
 
-        return entropy
+        if return_Cov_and_mean == True:
+            return entropy, new_Cov, new_mean
+        else:
+            return entropy
 
     #################################################################################
     ############    Function that return the Mutual Inforamtion matrix   ############
