@@ -160,7 +160,7 @@ class Metabolite_class:
             self.__class_MODEL_instance._update_network
 
             # Remove this metabolite from the elasticity matrix E_s
-            self.__class_MODEL_instance.elasticity.s.df.drop(name, axis=1, inplace=True)
+            self.__class_MODEL_instance._update_elasticity()
 
     #################################################################################
     #########           Fonction to update the meta dataframe              ##########

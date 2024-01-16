@@ -1,3 +1,11 @@
+"""
+Created on Tue Sep 26 08:26:49 2023
+
+Script for the creation of metabolic network and study of transmition of information throught it.
+
+@author: tuturax (Arthur Lequertier)
+"""
+
 #####################
 # Library
 #####################
@@ -150,8 +158,9 @@ class MODEL:
             Nr = N.loc[independent_rows]
 
             # Then we deduce the link matrix L from Nr and N
-            L = np.dot(N.to_numpy(), np.linalg.pinv(Nr.to_numpy()))
-            L.dtype = np.float64
+            L = np.dot(self.Stoichio_matrix.to_numpy(), np.linalg.pinv(Nr.to_numpy()))
+            print(L.shape)
+            # L.dtype = np.float64
 
             self.__cache_Link_matrix = L
             self.__cache_Reduced_Stoichio_matrix = Nr
@@ -167,6 +176,7 @@ class MODEL:
     # Jacobian
     @property  # Core
     def __Jacobian(self):
+        self._update_elasticity()
         if self.__cache_Jacobian is None:
             # Reset of the cache value of the inversed matrix of J
             self.__cache_Reversed_Jacobian = None
@@ -566,55 +576,49 @@ class MODEL:
         ### Description of the fonction
         """
         Function to update the elasticities matrices of the model after a direct modification of the stoichiometric matrix
+        or reaction and metabolite dataframes
         """
-        # First we add the metabolite (=column) to the E_s datafrmae
-        # We define a fixed variable n_reaction because elasticity.s.df depend of the sub_elasticity
-        n_reaction = len(self.elasticity.s.df.index)
 
-        if session.lower() == "e_s":
-            for meta in self.metabolites.df.index:
-                # If the metabolilte isn't in the model AND  is not external => we add it to the elasticity matrix
-                if (
-                    meta not in self.elasticity.s.df.columns
-                    and self.metabolites.df.at[meta, "External"] == False
-                ):
-                    self.elasticity.s.df[meta] = [0 for i in range(n_reaction)]
+        n_reaction = len(self.elasticity.s.df.columns)
 
-                # Else, if the metabolite is in the model AND is external => we remove it from the elasticity matrix
-                elif (
-                    meta in self.elasticity.s.df.columns
-                    and self.metabolites.df.at[meta, "External"] == True
-                ):
-                    self.elasticity.s.df.drop(columns=meta, inplace=True)
+        for meta in self.Link_matrix[1].index:
+            # If the metabolilte isn't in the reduced stochio matrix => we add it to the elasticity matrix
+            if meta not in self.elasticity.s.df.columns:
+                self.elasticity.s.df[meta] = [0 for i in range(n_reaction)]
 
-            # Pandas doesn't allow to add line before at least 1 column is add
-            if self.elasticity.s.df.columns.size != 0:
-                for reaction in self.reactions.df.index:
-                    if reaction not in self.elasticity.s.df.index:
-                        self.elasticity.s.df.loc[reaction] = [
-                            0 for i in self.elasticity.s.df.columns
-                        ]
+            # Else, if the metabolite isn't n the stoichio matrix and in the E_s elasticity matrix
+            # => we remove it from the elasticity matrix
+            elif (
+                meta in self.elasticity.s.df.columns
+                and meta not in self.Link_matrix[1].index
+            ):
+                self.elasticity.s.df.drop(columns=meta, inplace=True)
 
-            colonnes = self.elasticity.s.df.columns
-            index = self.elasticity.s.df.index
-            self.elasticity.s.thermo = pd.DataFrame(0, columns=colonnes, index=index)
-            self.elasticity.s.enzyme = pd.DataFrame(0, columns=colonnes, index=index)
-            self.elasticity.s.regulation = pd.DataFrame(
-                0, columns=colonnes, index=index
-            )
+        # Pandas doesn't allow to add line before at least 1 column is add
+        if self.elasticity.s.df.columns.size != 0:
+            for reaction in self.reactions.df.index:
+                if reaction not in self.elasticity.s.df.index:
+                    self.elasticity.s.df.loc[reaction] = [
+                        0 for i in self.elasticity.s.df.columns
+                    ]
 
-        elif session.lower() == "e_p":
-            for para in self.parameters.df.index:
-                if para not in self.elasticity.p.df.columns:
-                    self.elasticity.p.df[para] = [0 for i in self.elasticity.p.df.index]
+        colonnes = self.elasticity.s.df.columns
+        index = self.elasticity.s.df.index
+        self.elasticity.s.thermo = pd.DataFrame(0, columns=colonnes, index=index)
+        self.elasticity.s.enzyme = pd.DataFrame(0, columns=colonnes, index=index)
+        self.elasticity.s.regulation = pd.DataFrame(0, columns=colonnes, index=index)
 
-            # Pandas doesn't allow to add line before at least 1 column is add
-            if self.elasticity.p.df.columns.size != 0:
-                for reaction in self.reactions.df.index:
-                    if reaction not in self.elasticity.p.df.index:
-                        self.elasticity.p.df.loc[reaction] = [
-                            0 for i in self.elasticity.p.df.columns
-                        ]
+        for para in self.parameters.df.index:
+            if para not in self.elasticity.p.df.columns:
+                self.elasticity.p.df[para] = [0 for i in self.elasticity.p.df.index]
+
+        # Pandas doesn't allow to add line before at least 1 column is add
+        if self.elasticity.p.df.columns.size != 0:
+            for reaction in self.reactions.df.index:
+                if reaction not in self.elasticity.p.df.index:
+                    self.elasticity.p.df.loc[reaction] = [
+                        0 for i in self.elasticity.p.df.columns
+                    ]
 
         self._reset_value()
 
@@ -1351,6 +1355,12 @@ class MODEL:
     def plot(
         self, result="MI", title="", label=False, value_in_cell=False, index_to_keep=[]
     ):
+        """
+        Fonction to plot a heatmap of the mutual information
+
+        result     :  specify the data ploted MI/rho/cov
+
+        """
         import matplotlib
         import matplotlib.pyplot as plt
 
@@ -1460,6 +1470,35 @@ class MODEL:
 
         plt.colorbar()
         plt.show()
+
+    #############################################################################
+    ###################   Function plot the boxplot   #########################
+    def boxplot(self, fixed="", study=[]):
+        """
+        Fonction to plot a boxplot
+
+        """
+        # Fisrt, we check if the studied variables are all in the model
+        if study == []:
+            names = self.covariance.index
+        else:
+            for name in study:
+                if name not in self.covariance.index:
+                    raise NameError(f"The name variable {name} is not in the model !")
+            names = study
+
+        # Same for the fixed variable
+        if fixed != "":
+            if fixed not in self.covariance.index:
+                raise NameError(f"The fixed variable {fixed} is not in the model !")
+
+        # Then we begin to buil the plot
+        # The color of the box
+        color_original = "blue"
+        color_fixed = "red"
+
+        # The value of the original distribution
+        SD_original = self.__Standard_deviations
 
     #############################################################################
     ###################   Function add sampling data    #########################
