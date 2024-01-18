@@ -129,7 +129,9 @@ class Metabolite_class:
 
         # Look if the metabolite is in the model
         if name not in self.df.index:
-            raise NameError("Please enter a valide name \n")
+            raise NameError(
+                f"Please enter a valide name, {name} isn't in the model ! \n"
+            )
 
         else:
             # Else, the metabolite is remove from the dataframe
@@ -144,14 +146,14 @@ class Metabolite_class:
 
             # And from every mention of it in the reaction dataframe
             for reaction in self.__class_MODEL_instance.reactions.df.index:
-                key_to_remove = [
+                keys_to_remove = [
                     cle
                     for cle in self.__class_MODEL_instance.reactions.df.loc[
                         reaction, "Metabolites"
                     ].keys()
                     if name in cle
                 ]
-                for key_to_remove in key_to_remove:
+                for key_to_remove in keys_to_remove:
                     self.__class_MODEL_instance.reactions.df.loc[
                         reaction, "Metabolites"
                     ].pop(key_to_remove)

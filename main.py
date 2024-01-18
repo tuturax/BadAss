@@ -158,8 +158,7 @@ class MODEL:
             Nr = N.loc[independent_rows]
 
             # Then we deduce the link matrix L from Nr and N
-            L = np.dot(self.Stoichio_matrix.to_numpy(), np.linalg.pinv(Nr.to_numpy()))
-            print(L.shape)
+            L = np.dot(N.to_numpy(), np.linalg.pinv(Nr.to_numpy()))
             # L.dtype = np.float64
 
             self.__cache_Link_matrix = L
@@ -579,21 +578,22 @@ class MODEL:
         or reaction and metabolite dataframes
         """
 
-        n_reaction = len(self.elasticity.s.df.columns)
+        ###
+        # First we check the metabolite
 
-        for meta in self.Link_matrix[1].index:
-            # If the metabolilte isn't in the reduced stochio matrix => we add it to the elasticity matrix
+        # For every metabolite in the stoichio matrix (without the external one, they are in the parameter section) :
+        for meta in self.N_without_ext.index:
+            # If the metabolilte isn't in the E_s elasticity matrix => we add it to the E_s elasticity matrix
             if meta not in self.elasticity.s.df.columns:
-                self.elasticity.s.df[meta] = [0 for i in range(n_reaction)]
+                self.elasticity.s.df[meta] = 0
 
-            # Else, if the metabolite isn't n the stoichio matrix and in the E_s elasticity matrix
-            # => we remove it from the elasticity matrix
-            elif (
-                meta in self.elasticity.s.df.columns
-                and meta not in self.Link_matrix[1].index
-            ):
+        # For every metabolite of the E_s elasticity matrix :
+        for meta in self.elasticity.s.df.columns:
+            # If the metabolite isn't in the stoichio matrix => we remove it from the E_s elasticity matrix
+            if meta not in self.N_without_ext.index:
                 self.elasticity.s.df.drop(columns=meta, inplace=True)
 
+        # Special case when there is no reaction
         # Pandas doesn't allow to add line before at least 1 column is add
         if self.elasticity.s.df.columns.size != 0:
             for reaction in self.reactions.df.index:
@@ -601,16 +601,27 @@ class MODEL:
                     self.elasticity.s.df.loc[reaction] = [
                         0 for i in self.elasticity.s.df.columns
                     ]
-
+        # Reset of the thermodynamic sub-matrix of the E_s elasticity matrix
         colonnes = self.elasticity.s.df.columns
         index = self.elasticity.s.df.index
         self.elasticity.s.thermo = pd.DataFrame(0, columns=colonnes, index=index)
         self.elasticity.s.enzyme = pd.DataFrame(0, columns=colonnes, index=index)
         self.elasticity.s.regulation = pd.DataFrame(0, columns=colonnes, index=index)
 
+        ###
+        # Then we deal with the parameters
+
+        # For every parameter in the parameters dataframe
         for para in self.parameters.df.index:
+            # If the parameter is not in the E_p elasticity matrix => We add the parameter to E_p
             if para not in self.elasticity.p.df.columns:
-                self.elasticity.p.df[para] = [0 for i in self.elasticity.p.df.index]
+                self.elasticity.p.df[para] = 0
+
+        # For every parameters in the E_p elasticity matrix
+        for para in self.elasticity.p.df.columns:
+            # If the parameters isn't in the parameters dataframe, we remove it from E_p
+            if para not in self.parameters.df.index:
+                self.elasticity.p.df.drop(columns=para, inplace=True)
 
         # Pandas doesn't allow to add line before at least 1 column is add
         if self.elasticity.p.df.columns.size != 0:
@@ -911,21 +922,190 @@ class MODEL:
     ############    Function that return the Mutual Inforamtion matrix   ############
     def group_entropy_fixed_vector(
         self,
-        groups_to_study=[],
-        fixed_elements=[],
-        new_mean_vector=[],
+        elements_to_fixe: list,
+        elements_to_study=[],
+        new_mean_fixed=[],
         return_Cov_and_mean=False,
+        return_all=False,
     ):
         ### Description of the fonction
         """
         Fonction to compute the entropy of a group when a vector parameter is fixed
 
-        groups : a list of list or a dictionnary contenning a list of string of the variables/parameter to regroup for the study
-        fixed_elements : a list of list or a dictionnary contenning a list of string of the variables/parameter to fix
-        new_mean_vector : a list of list or a dictionnary contenning a list of the new mean of the fixed vector
+        elements_to_fixe  : a list contenning string of the variables/parameter to fixed
+        elements_to_study : a list contenning a strings of the variables/parameter to regroup for the study
+        new_mean_vector   : a list contenning a the new mean of the fixed vector
 
-        if groups = [] (by defalut) we take all variables/parameters indivudually
+        if elements_to_study = [] (by defalut) we take all variables/parameters indivudually
         """
+        # Line to deal with the ./0 case
+        np.seterr(divide="ignore", invalid="ignore")
+
+        # Take the covariance matrix as local variable to avoid a lot of function call (and more clarity).
+        Cov_df = self.covariance
+
+        # local function to extract the mean from the model by the name of the element fo the model
+        def mean_in_the_model(name):
+            if name in self.metabolites.df.index:
+                return self.metabolites.df.at[name, "Concentration (mmol/gDW)"]
+            elif name in self.reactions.df.index:
+                return self.reactions.df.at[name, "Flux (mmol/gDW/h)"]
+            elif name in self.parameters.df.index:
+                return self.parameters.df.at[name, "Mean values"]
+            else:
+                raise NameError(
+                    f"The input name '{name}' in the 'fixed_vector' argument is not in the metabolite, reactions or parameters dataframe !"
+                )
+
+        ##############################
+        # Check of the input variables
+
+        # First we check the elements that the user want to fixe
+        # If the fixed_elements list is empty (by default), we fix every single variables and parameters
+        if elements_to_fixe == []:
+            raise ValueError("Please enter a least 1 element of the model !")
+
+        # If we just take as input a list of str, we just transform it into a list of list
+        else:
+            for element in elements_to_fixe:
+                if element not in Cov_df:
+                    raise NameError(
+                        f"The elements '{element}' in the elements_to_fixe input is not in the model !"
+                    )
+
+        # Then we check the elements to study
+        # If the groups variables is empty (by default), we study every single variables and parameters
+        if elements_to_study == []:
+            for index in self.covariance.index:
+                elements_to_study.append(index)
+
+        elif isinstance(elements_to_study, str):
+            elements_to_study = [elements_to_study]
+
+        if not isinstance(elements_to_study, list):
+            raise type(
+                "The input argument 'elements_to_study' must be a list of string or a single string for the case of 1 element to study !"
+            )
+
+        # Finally, we check what the user input for the mean vector
+        # We fill a list that contnaing the old value of mean
+        old_mean_fixed = []
+        for element in elements_to_fixe:
+            old_mean_fixed.append(mean_in_the_model(element))
+
+        # Then we check what the user input
+        # In the case of an empty list (by default), we fill it by the old value of mean
+        if new_mean_fixed == []:
+            new_mean_fixed = old_mean_fixed
+
+        elif not isinstance(new_mean_fixed, list):
+            raise TypeError(
+                f"The input argument 'new_mean_vector' must be a list of number !"
+            )
+
+        elif len(new_mean_fixed) != len(elements_to_fixe):
+            raise ValueError(
+                f"The number of element for the input 'elements_to_fixe' and 'new_mean_vector' isn't matching, {len(elements_to_fixe)} VS {len(new_mean_fixed)} !"
+            )
+
+        new_mean_fixed = np.array(new_mean_fixed)
+        old_mean_fixed = np.array(old_mean_fixed)
+
+        ##################
+        # Computation
+
+        # Initialisation of the MI matrix
+        entropy = pd.DataFrame(
+            index=elements_to_study, columns=elements_to_fixe, dtype=float
+        )
+
+        # Special line for return of all variable
+        if return_all == True:
+            # Intitialisation of the SD dataframe
+            SD_df = pd.DataFrame(columns=["Old SD", "New SD", "Delta SD"])
+            # Intitialisation of the SD dataframe
+            mean_df = pd.DataFrame(columns=["Old mean", "New mean", "Delta mean"])
+            # Then we add a line of 0 for each variable study
+            for element in elements_to_study:
+                SD_df.loc[element] = [0 for column in SD_df.columns]
+                mean_df.loc[element] = [0 for column in mean_df.columns]
+
+        # We create intermediate matrix
+        Cov_ss = Cov_df.loc[elements_to_study, elements_to_study].to_numpy()
+        Cov_ff = Cov_df.loc[elements_to_fixe, elements_to_fixe].to_numpy()
+        Cov_sf = Cov_df.loc[elements_to_study, elements_to_fixe].to_numpy()
+        Cov_fr = Cov_sf.T
+
+        # The targeted covariance matrix of the studied elements in the case where there is a fixed vector
+        Cov_ss_f = Cov_ss - np.dot(Cov_sf, np.dot(np.linalg.inv(Cov_ff), Cov_fr))
+
+        # New entropy of the studied elements with the fixed vector
+        entropy = len(Cov_ss) / 2 * np.log(2 * np.pi * np.e) + np.log(
+            np.linalg.det(Cov_ss_f)
+        )
+
+        # If the elements are fixed to an other values that the mean, the mean of the study elements change too !
+        delta_mean_study = np.dot(
+            np.dot(Cov_sf, np.linalg.inv(Cov_ff)),
+            (new_mean_fixed - old_mean_fixed),
+        )
+
+        # Line to retablish the warning
+        np.seterr(divide="warn", invalid="warn")
+
+        # Case where we must return all variable
+        if return_all == True:
+            # We transform the final covariance matrix to dataframe
+            Cov_ss_f_df = pd.DataFrame(
+                Cov_ss_f, index=elements_to_study, columns=elements_to_study
+            )
+
+            # And the new mean too
+            delta_mean_study_df = pd.DataFrame(
+                delta_mean_study, index=elements_to_study, columns=["Delta"]
+            )
+
+            # For every variables/parameters study
+            for element in elements_to_study:
+                # We add the old value of SD and mean
+                SD_df.at[element, "Old SD"] = np.sqrt(Cov_df.at[element, element])
+                old_mean_study = mean_in_the_model(element)
+                mean_df.at[element, "Old mean"] = old_mean_study
+
+                # Then the new ones after to fixe the vector
+                SD_df.at[element, "New SD"] = np.sqrt(Cov_ss_f_df.at[element, element])
+                mean_df.at[element, "New mean"] = (
+                    delta_mean_study_df.at[element, "Delta"] + old_mean_study
+                )
+
+                # And we also look for the difference
+                SD_df.at[element, "Delta SD"] = np.abs(
+                    np.sqrt(Cov_df.at[element, element])
+                    - np.sqrt(Cov_ss_f_df.at[element, element])
+                )
+                mean_df.at[element, "Delta mean"] = delta_mean_study_df.at[
+                    element, "Delta"
+                ]
+
+            return SD_df, mean_df
+
+        elif return_Cov_and_mean == True:
+            return entropy, Cov_ss_f, delta_mean_study
+
+        else:
+            return entropy
+
+    """
+   #################################################################################
+    ############    Function that return the Mutual Inforamtion matrix   ############
+    def group_entropy_fixed_vector(
+        self,
+        groups_to_study=[],
+        fixed_elements=[],
+        new_mean_vector=[],
+        return_Cov_and_mean=False,
+    ):
+
         # Line to deal with the ./0 case
         np.seterr(divide="ignore", invalid="ignore")
 
@@ -1072,6 +1252,7 @@ class MODEL:
             return entropy, new_Cov, new_mean
         else:
             return entropy
+    """
 
     #################################################################################
     ############    Function that return the Mutual Inforamtion matrix   ############
@@ -1473,24 +1654,30 @@ class MODEL:
 
     #############################################################################
     ###################   Function plot the boxplot   #########################
-    def boxplot(self, fixed="", study=[]):
+    def boxplot(self, fixed: str, study=[]):
         """
         Fonction to plot a boxplot
 
         """
         # Fisrt, we check if the studied variables are all in the model
-        if study == []:
-            names = self.covariance.index
-        else:
+        # The case where the user enter something
+        if study != []:
             for name in study:
                 if name not in self.covariance.index:
                     raise NameError(f"The name variable {name} is not in the model !")
             names = study
 
+        # The default case where the variable "study" = [] => we take every variable of the model as things we study
+        elif study == []:
+            names = self.covariance.index
+
         # Same for the fixed variable
-        if fixed != "":
-            if fixed not in self.covariance.index:
-                raise NameError(f"The fixed variable {fixed} is not in the model !")
+        if fixed not in self.covariance.index:
+            raise NameError(f"The input fixed variable '{fixed}' is not in the model !")
+
+        # Then we recover the values that we want to plot
+
+        # First, the data before to fixe :
 
         # Then we begin to buil the plot
         # The color of the box
