@@ -484,6 +484,23 @@ class MODEL:
             columns=self.covariance.columns,
         )
 
+    ###########################################################################
+    ############  Function to find where the variable name is  ################
+    def find(self, name: str):
+        """
+        Function to find where a specie is in the model
+
+        name : a string of the name that you want to know where is it
+        """
+        if name in self.metabolites.df.index:
+            return "metabolite"
+        elif name in self.reactions.df.index:
+            return "reaction"
+        elif name in self.parameters.df.index:
+            return "parameter"
+        else:
+            raise NameError(f"The input name '{name}' is not in the model !")
+
     #############################################################################
     #############   Function reset some the values of the model  ################
     def _reset_value(self, session=""):
@@ -925,8 +942,8 @@ class MODEL:
         elements_to_fixe: list,
         elements_to_study=[],
         new_mean_fixed=[],
-        return_Cov_and_mean=False,
         return_all=False,
+        plot=False,
     ):
         ### Description of the fonction
         """
@@ -1053,8 +1070,11 @@ class MODEL:
         # Line to retablish the warning
         np.seterr(divide="warn", invalid="warn")
 
-        # Case where we must return all variable
-        if return_all == True:
+        #############
+        # return part
+
+        # Case where we must return all variable and plot
+        if return_all == True or plot == True:
             # We transform the final covariance matrix to dataframe
             Cov_ss_f_df = pd.DataFrame(
                 Cov_ss_f, index=elements_to_study, columns=elements_to_study
@@ -1087,10 +1107,115 @@ class MODEL:
                     element, "Delta"
                 ]
 
-            return SD_df, mean_df
+            if plot == True:
+                # Importation of the necessary module
+                import matplotlib.pyplot as plt
+                from matplotlib.pyplot import xticks
+                from matplotlib.patches import Patch
 
-        elif return_Cov_and_mean == True:
-            return entropy, Cov_ss_f, delta_mean_study
+                # Attribtution of the color of the boxplot
+                color_old = "blue"
+                color_new = "red"
+
+                # initialisation of the lists that will contain all the data for the plot
+                data_plot = []
+                positions_box = []
+                positions_label = []
+                labels = []
+                colors = []
+
+                # For every elements
+                for i, element in enumerate(SD_df.index):
+                    # The old boxplot
+                    data_plot.append(
+                        [
+                            mean_df.at[element, "Old mean"]
+                            + SD_df.at[element, "Old SD"],
+                            mean_df.at[element, "Old mean"]
+                            - SD_df.at[element, "Old SD"],
+                        ]
+                    )
+                    positions_box.append(2 * i - 0.3)
+                    positions_label.append(2 * i)
+                    labels.append(element)
+                    colors.append(color_old)
+
+                    # The new boxplot
+                    data_plot.append(
+                        [
+                            mean_df.at[element, "New mean"]
+                            + SD_df.at[element, "New SD"],
+                            mean_df.at[element, "New mean"]
+                            - SD_df.at[element, "New SD"],
+                        ]
+                    )
+                    positions_box.append(2 * i + 0.3)
+                    positions_label.append(2 * i)
+                    labels.append(" ")
+                    colors.append(color_new)
+
+                # We plot !!!
+                fig, ax = plt.subplots()
+                bp = plt.boxplot(
+                    data_plot,
+                    positions=positions_box,
+                    labels=labels,
+                    patch_artist=True,
+                    showfliers=False,
+                    showcaps=False,
+                    whis=0,
+                )
+
+                # Set labels location
+                xticks(positions_label)
+
+                # Ereasing of the median
+                for median in bp["medians"]:
+                    median.set_visible(False)
+
+                # Set of the color of the plotbox
+                for box, color in zip(bp["boxes"], colors):
+                    box.set_facecolor(color)
+
+                # Add of the title
+                plt.title("Title test")
+                plt.ylabel("Values")
+
+                # Legend
+                legend_elements = [
+                    Patch(facecolor="blue", edgecolor="blue", label="Old"),
+                    Patch(facecolor="red", edgecolor="red", label="New"),
+                ]
+                plt.legend(handles=legend_elements, loc="upper right")
+
+                # Rotation of the labels
+                plt.setp(
+                    ax.get_xticklabels(),
+                    rotation=45,
+                    ha="right",
+                    rotation_mode="anchor",
+                )
+
+                # Add of black line between parameter, metabolite and flux
+                pos_line = -1
+                for element in SD_df.index:
+                    if self.find(element) == "parameter":
+                        pos_line += 2
+                plt.axvline(x=pos_line, color="black", linestyle="--", linewidth=1)
+
+                for element in SD_df.index:
+                    if self.find(element) == "metabolite":
+                        pos_line += 2
+                plt.axvline(x=pos_line, color="black", linestyle="--", linewidth=1)
+
+                # Display of the boxplot
+                plt.show()
+
+            if return_all == True:
+                return SD_df, mean_df
+
+        ##elif return_Cov_and_mean == True:
+        ##    return entropy, Cov_ss_f, delta_mean_study
 
         else:
             return entropy
