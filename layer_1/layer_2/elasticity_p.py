@@ -35,6 +35,7 @@ class Elasticity_p_class:
 
     @df.setter
     def df(self, matrix):
+        # If the new matrix is a numpy matrix, its shape must be exactly the same as the previous dataframe
         if isinstance(matrix, np.ndarray):
             if matrix.shape != self.df.shape:
                 raise IndexError(
@@ -44,8 +45,12 @@ class Elasticity_p_class:
                 self._df.values[:] = matrix
                 self.__class_MODEL_instance._reset_value(session="E_p")
 
-        elif type(matrix) == type(pd.DataFrame()):
-            if matrix.shape != self.df.shape:
+        # If the new matrix is a dataframe, it's shape must be N_reaction X N_parameters
+        elif isinstance(matrix, pd.DataFrame):
+            if matrix.shape != (
+                self.df.shape[0],
+                self.__class_MODEL_instance.parameters.df.index.shape[0],
+            ):
                 raise IndexError(
                     "The shape of your matrix isn't matching with the elasticity matrix"
                 )
@@ -55,7 +60,7 @@ class Elasticity_p_class:
 
         else:
             raise TypeError(
-                "Please enter a numpy matrix  or Pandas datafrmae to fill the E_s matrix"
+                "Please enter a numpy matrix  or Pandas dataframe to fill the E_s matrix"
             )
 
     #################################################################################

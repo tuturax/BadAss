@@ -129,37 +129,47 @@ class Parameter_class:
         Fonction to consider all external metabolite as parameters
         """
         # For every metabolite of the model
+        missing_columns = []
         for meta in self.__class_MODEL_instance.metabolites.df.index:
-            # If this one is external
-            if self.__class_MODEL_instance.metabolites.df.loc[meta, "External"] == True:
-                # If this one is not already in the parameter dataframe
+            # If this metabolite is external
+            if self.__class_MODEL_instance.metabolites.df.at[meta, "External"] == True:
+                # If this external metabolite is'nt already in the parameter dataframe
                 if (meta + "_para") not in self.df.index:
                     # We add it to the parameter dataframe
                     self.add(meta + "_para")
-                # And add a column to the parameter elasticity matrix
+
+                # Same for the parameters elsaticity matrix
                 if (
                     meta + "_para"
                 ) not in self.__class_MODEL_instance.elasticity.p.df.columns:
-                    self.__class_MODEL_instance.elasticity.p.df[meta + "_para"] = 0.0
+                    missing_columns.append(meta + "_para")
+                    # self.__class_MODEL_instance.elasticity.p.df[meta + "_para"] = 0.0
 
-        # For every reaction of the N matrix
-        for reaction in self.__class_MODEL_instance.Stoichio_matrix.columns:
-            # if the reaction is not in the Dataframe, we add it
-            if reaction not in self.__class_MODEL_instance.elasticity.p.df.index:
-                self.__class_MODEL_instance.elasticity.p.df.loc[reaction] = 0.0
+        # Then we add every columns at the elasticity matrix
+        if missing_columns:
+            new_columns = pd.DataFrame(
+                0,
+                columns=missing_columns,
+                index=self.__class_MODEL_instance.elasticity.p.df.index,
+            )
+            pd.concat(
+                [self.__class_MODEL_instance.elasticity.p.df, new_columns], axis=1
+            )
 
-            # Then we for each metabolite
-            for meta in self.__class_MODEL_instance.Stoichio_matrix.index:
-                # We check if this one is external
-                if self.__class_MODEL_instance.metabolites.df.loc[meta, "External"]:
-                    # Then we attribute a special value to its elasticity
-                    self.__class_MODEL_instance.elasticity.p.df.loc[
-                        reaction, meta + "_para"
-                    ] = (
-                        -0.5
-                        * self.__class_MODEL_instance.Stoichio_matrix.loc[
-                            meta, reaction
-                        ]
-                    )
+        # Creation of a temporary dataframe with just the metabolite
+        df_temporary = pd.DataFrame(
+            index=self.__class_MODEL_instance.elasticity.p.df.index
+        )
+
+        # For every metabolite
+        for meta in self.__class_MODEL_instance.metabolites.df.index:
+            if self.__class_MODEL_instance.metabolites.df.at[meta, "External"]:
+                df_temporary[meta] = (
+                    -0.5 * self.__class_MODEL_instance.Stoichio_matrix.loc[meta]
+                )
+
+        self.__class_MODEL_instance.elasticity.p.df = pd.concat(
+            [self.__class_MODEL_instance.elasticity.p.df, df_temporary], axis=1
+        )
 
         self.__class_MODEL_instance._reset_value("E_p")

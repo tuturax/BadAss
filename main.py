@@ -547,16 +547,22 @@ class MODEL:
         self._Stoichio_matrix = new_df
         self._update_network()
 
-    def _update_network(self, session="Matrix") -> None:
+    def reset(self):
+        ### Description of the function
+        """
+        Function to reset the model
+        """
+        self.Stoichio_matrix = pd.DataFrame()
+        self.parameters.df.reset_index(inplace=True)
+        self.enzymes.df.reset_index(inplace=True)
+        self.elasticity.s.df.reset_index(inplace=True)
+        self.elasticity.p.df.reset_index(inplace=True)
+
+    def _update_network(self) -> None:
         ### Description of the fonction
         """
         Fonction to update the dataframes after atribuated a new values to the stoichio matrix
         """
-
-        if session == "Matrix":
-            # Put the dataframe to 0
-            self.metabolites.df.drop(self.metabolites.df.index, inplace=True)
-            self.reactions.df.drop(self.reactions.df.index, inplace=True)
 
         # Deal with the reactions
         # Loop on every reaction of the stoichiometry matrix
@@ -566,7 +572,7 @@ class MODEL:
 
             # We also add the stochiometric coefficent to the dataframe of reaction
             for meta in self.Stoichio_matrix.index:
-                if self.Stoichio_matrix.loc[meta][reaction] != 0:
+                if self.Stoichio_matrix.at[meta, reaction] != 0:
                     dict_stochio[meta] = self.Stoichio_matrix.loc[meta, reaction]
 
             # Then we add the reaction to the reactions Dataframe
@@ -1448,10 +1454,6 @@ class MODEL:
         file     : string the specify the directory of the Excel file
 
         """
-        self.parameters.df.reset_index(inplace=True)
-        self.enzymes.df.reset_index(inplace=True)
-        self.elasticity.s.df.reset_index(inplace=True)
-        self.elasticity.p.df.reset_index(inplace=True)
 
         df = pd.read_excel(file)
         N = df.drop(df.columns[0], axis=1)
@@ -1462,11 +1464,11 @@ class MODEL:
 
         self._Stoichio_matrix = N
 
-        self._update_network
+        self._update_network()
 
         for meta in self.metabolites.df.index:
             if meta[-3:] == "(e)":
-                self.metabolites.df.loc[meta]["External"] = True
+                self.metabolites.df.at[meta, "External"] = True
 
     #############################################################################
     ###################   Function to read a SBML file  #########################
@@ -1479,13 +1481,20 @@ class MODEL:
         reference_state_reactions="reference_state_reactions.tsv",
         reference_state_v="reference_state_v.tsv",
         reference_state_keq="reference_state_keq.tsv",
+        ignore_error=False,
     ):
         ### Description of the fonction
         """
         Fonction read a SBML file
 
-        file     : string the specify the directory of the SBML file
-
+        directory     : String of the the directory of the SBML directory
+        file_SBML     : String of the .xml file
+        reference_state_metabolites : String for the database of metabolite name
+        reference_state_c           : String for the database of metabolite concentration at reference state
+        reference_state_reactions   : String for the database of reaction name
+        reference_state_v           : String for the database of reaction flux at reference state
+        reference_state_keq         : String for the database of reaction equibrlium constant
+        ignor_error                 : Boolean to specify if you want to continue th reading process, even if there is an error in the SBML file
         """
         import libsbml
 
@@ -1496,13 +1505,21 @@ class MODEL:
         document = reader.readSBML(directory + file_SBML)
 
         n_error = document.getNumErrors()
-        if n_error != 0:
+
+        # If the user decided to take care of the error in the model
+        if n_error != 0 and ignore_error == False:
             raise ValueError(
-                f"There is {n_error} in your SBML file, please fix it before to use this function"
+                f"There is {n_error} error(s) in your SBML file, please :\n-fix it before to use this function \n-Or put the parameter ignore_error too True"
             )
 
         else:
-            print(f"0 error detected in your SBML file")
+            if ignore_error == True:
+                print(
+                    f"There is {n_error} error(s) in you SBML file, but you decided to ignore it, you little rogue !"
+                )
+            else:
+                print(f"0 error detected in your SBML file")
+
             model = document.getModel()
 
             N = pd.DataFrame(dtype=float)
@@ -1610,6 +1627,9 @@ class MODEL:
     ###################   Function to check the model   #########################
     @property
     def check(self):
+        """
+        Function to check the BadAss model
+        """
         # Check the reaction
         unused_reactions = []
         for react in self._Stoichio_matrix.columns.to_list():
@@ -1643,6 +1663,9 @@ class MODEL:
     ###################   Function to check the model   #########################
     @property
     def check_unstable(self):
+        """
+        Function that check if the BadAss model is unstable
+        """
         eigen_values = np.linalg.eigvals(self.Jacobian.to_numpy())
 
         positif = False

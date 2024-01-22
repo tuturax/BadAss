@@ -156,7 +156,7 @@ class Reaction_class:
 
         """
         # Look if the reaction class was well intialised
-        if type(self.df) != type(pd.DataFrame()):
+        if not isinstance(self.df, pd.DataFrame):
             self.df = pd.DataFrame(
                 columns=[
                     "Metabolites",
@@ -167,12 +167,7 @@ class Reaction_class:
             )
 
         # Look if the reaction is already in the model
-        if name in self.df.index:
-            True
-            # raise NameError("The reaction \""+ name +"\" is already in the model !")
-
-        # Else, the reaction is add to the model by an add to the DataFrame
-        else:
+        if name not in self.df.index:
             self.df.loc[name] = [metabolites, k_eq, law, flux]
 
             # We check the stoichiometric coefficient link to this reaction in order to automatically add them to the matrix
