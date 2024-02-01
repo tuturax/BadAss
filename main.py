@@ -12,7 +12,7 @@ Script for the creation of metabolic network and study of transmition of informa
 import numpy as np
 import pandas as pd
 import sympy
-import scipy
+from scipy.linalg import expm
 
 from layer_1.reactions import Reaction_class
 from layer_1.metabolites import Metabolite_class
@@ -57,6 +57,8 @@ class MODEL:
             columns=["Name", "Type", "Mean", "Standard deviation", "Distribution"]
         )
 
+        self.__frequency_omega = 0.0
+
         print(
             "Model created \n \nTo add metabolite, use .metabolites.add_meta \nTo add reaction,   use .reactions.add_reaction"
         )
@@ -86,7 +88,7 @@ class MODEL:
 
     @property
     def __Stoichio_matrix(self):
-        return self.Stoichio_matrix.to_numpy()
+        return self.Stoichio_matrix.to_numpy(dtype="float64")
 
     @property
     def N(self):
@@ -108,7 +110,17 @@ class MODEL:
 
     @property
     def __N_without_ext(self):
-        return self.N_without_ext.to_numpy()
+        return self.N_without_ext.to_numpy(dtype="float64")
+
+    @property
+    def frequency_omega(self):
+        return self.__frequency_omega
+
+    @frequency_omega.setter
+    def frequency_omega(self, omega):
+        if omega < 0 or omega == False:
+            omega = 0.0
+        self.__frequency_omega = omega
 
     @property
     def reactions(self):
@@ -146,7 +158,7 @@ class MODEL:
             dependent_rows = []
             independent_rows = []
 
-            _, independent = sympy.Matrix(N.to_numpy()).T.rref()
+            _, independent = sympy.Matrix(N.to_numpy(dtype="float64")).T.rref()
 
             for i, meta in enumerate(N.index):
                 if i in independent:
@@ -158,7 +170,10 @@ class MODEL:
             Nr = N.loc[independent_rows]
 
             # Then we deduce the link matrix L from Nr and N
-            L = np.dot(N.to_numpy(), np.linalg.pinv(Nr.to_numpy()))
+            L = np.dot(
+                N.to_numpy(dtype="float64"),
+                np.linalg.pinv(Nr.to_numpy(dtype="float64")),
+            )
             # L.dtype = np.float64
 
             self.__cache_Link_matrix = L
@@ -182,9 +197,17 @@ class MODEL:
             # Compute the J matrix
             L, Nr = self.Link_matrix
             self.__cache_Jacobian = np.dot(
-                Nr.to_numpy(), np.dot(self.elasticity.s.df.to_numpy(), L)
+                Nr.to_numpy(dtype="float64"),
+                np.dot(self.elasticity.s.df.to_numpy(dtype="float64"), L),
             )
-
+            # Case of a frequency response
+            if self.frequency_omega != 0:
+                self.__cache_Jacobian = (
+                    self.__cache_Jacobian
+                    - np.identity(len(self.__cache_Jacobian), dtype=complex)
+                    * self.frequency_omega
+                    * 1j
+                )
         return self.__cache_Jacobian
 
     @property  # Displayed
@@ -226,33 +249,32 @@ class MODEL:
     @property  # Core
     def __R_s_p(self):
         if self.__cache_R_s_p is None:
+            E_p = self.elasticity.p.df.to_numpy(dtype="float64")
             C = -np.dot(
                 np.dot(self.Link_matrix[0], self.__Jacobian_reversed),
                 self.Link_matrix[1],
             )
 
-            self.__cache_R_s_p = np.dot(C, self.elasticity.p.df.to_numpy())
+            self.__cache_R_s_p = np.dot(C, E_p)
 
         return self.__cache_R_s_p
 
     @property  # Displayed
     def R_s_p(self):
-        # We only add the internal metabolite
-        index_meta = self.elasticity.s.df.columns.to_list()
+        # We only add the internal metabolite as variable
         return pd.DataFrame(
             self.__R_s_p,
-            index=index_meta,
-            columns=self.parameters.df.index,
+            index=self.elasticity.s.df.columns,
+            columns=self.elasticity.p.df.columns,
         )
 
     # R_v_p
     @property  # Core
     def __R_v_p(self):
         if self.__cache_R_v_p is None:
-            self.__cache_R_v_p = (
-                np.dot(self.elasticity.s.df, self.__R_s_p)
-                + self.elasticity.p.df.to_numpy()
-            )
+            self.__cache_R_v_p = np.dot(
+                self.elasticity.s.df.to_numpy(dtype="float64"), self.__R_s_p
+            ) + self.elasticity.p.df.to_numpy(dtype="float64")
 
         return self.__cache_R_v_p
 
@@ -261,7 +283,7 @@ class MODEL:
         return pd.DataFrame(
             self.__R_v_p,
             index=self.elasticity.s.df.index,
-            columns=self.parameters.df.index,
+            columns=self.elasticity.p.df.columns,
         )
 
     # R_s_c
@@ -270,7 +292,10 @@ class MODEL:
         if self.__cache_R_s_c is None:
             self.__cache_R_s_c = -np.dot(
                 self.Jacobian_reversed,
-                np.dot(self.__Stoichio_matrix, self.elasticity.s.df.to_numpy()),
+                np.dot(
+                    self.__Stoichio_matrix,
+                    self.elasticity.s.df.to_numpy(dtype="float64"),
+                ),
             ) + np.identity(len(self.__Stoichio_matrix))
 
         return self.__cache_R_s_c
@@ -293,7 +318,9 @@ class MODEL:
     @property  # Core
     def __R_v_c(self):
         if self.__cache_R_v_c is None:
-            self.__cache_R_v_c = np.dot(self.elasticity.s.df.to_numpy(), self.__R_s_c)
+            self.__cache_R_v_c = np.dot(
+                self.elasticity.s.df.to_numpy(dtype="float64"), self.__R_s_c
+            )
         return self.__cache_R_v_c
 
     @property  # Displayed
@@ -349,8 +376,8 @@ class MODEL:
 
             Cov = np.block(
                 [
-                    [covariance_dp, np.dot(covariance_dp, R.T)],
-                    [matrix_RC, np.dot(matrix_RC, R.T)],
+                    [covariance_dp, np.dot(covariance_dp, np.conjugate(R.T))],
+                    [matrix_RC, np.dot(matrix_RC, np.conjugate(R.T))],
                 ]
             )
 
@@ -484,6 +511,45 @@ class MODEL:
             columns=self.covariance.columns,
         )
 
+    ################################
+    # Temporal control coefficient
+    def temporal_C_s_p(self, t=0.0):
+        L, N_r = self.Link_matrix
+
+        return np.dot(
+            np.dot(
+                np.dot(L, expm(self.Jacobian * t) - np.identity(len(self.Jacobian))),
+                self.Jacobian_reversed,
+            ),
+            N_r,
+        )
+
+    def temporal_R_s_p(self, t=0.0):
+        return np.dot(
+            self.temporal_C_s_p(t), self.elasticity.p.df.to_numpy(dtype="float64")
+        )
+
+    def temporal_C_v_p(self, t=0.0):
+        L, N_r = self.Link_matrix
+
+        return np.dot(
+            np.dot(
+                np.dot(
+                    self.elasticity.s.df.to_numpy(dtype="float64"),
+                    np.dot(
+                        L, expm(self.Jacobian * t) - np.identity(len(self.Jacobian))
+                    ),
+                ),
+                self.Jacobian_reversed,
+            ),
+            N_r,
+        ) + np.identity(self.N.shape[1])
+
+    def temporal_R_v_p(self, t=0.0):
+        return np.dot(
+            self.temporal_C_v_p(t), self.elasticity.p.df.to_numpy(dtype="float64")
+        )
+
     ###########################################################################
     ############  Function to find where the variable name is  ################
     def find(self, name: str):
@@ -603,7 +669,6 @@ class MODEL:
 
         ###
         # First we check the metabolite
-
         # For every metabolite in the stoichio matrix (without the external one, they are in the parameter section) :
         for meta in self.N_without_ext.index:
             # If the metabolilte isn't in the E_s elasticity matrix => we add it to the E_s elasticity matrix
@@ -634,25 +699,22 @@ class MODEL:
         ###
         # Then we deal with the parameters
 
-        # For every parameter in the parameters dataframe
+        missing_para = []
+        # For every parameters
         for para in self.parameters.df.index:
-            # If the parameter is not in the E_p elasticity matrix => We add the parameter to E_p
+            # If it is not in the E_p matrix
             if para not in self.elasticity.p.df.columns:
-                self.elasticity.p.df[para] = 0
+                missing_para.append(para)
+        # We add it
+        self.elasticity.p.add_columns(missing_para)
 
+        para_to_remove_from_E_p = []
         # For every parameters in the E_p elasticity matrix
         for para in self.elasticity.p.df.columns:
             # If the parameters isn't in the parameters dataframe, we remove it from E_p
             if para not in self.parameters.df.index:
-                self.elasticity.p.df.drop(columns=para, inplace=True)
-
-        # Pandas doesn't allow to add line before at least 1 column is add
-        if self.elasticity.p.df.columns.size != 0:
-            for reaction in self.reactions.df.index:
-                if reaction not in self.elasticity.p.df.index:
-                    self.elasticity.p.df.loc[reaction] = [
-                        0 for i in self.elasticity.p.df.columns
-                    ]
+                para_to_remove_from_E_p.append(para)
+        self.elasticity.p.remove_columns(para_to_remove_from_E_p)
 
         self._reset_value()
 
@@ -667,7 +729,7 @@ class MODEL:
         np.seterr(divide="ignore", invalid="ignore")
 
         Cov_df = self.covariance
-        Cov = Cov_df.to_numpy()
+        Cov = Cov_df.to_numpy(dtype="float64")
 
         rho = np.zeros((Cov.shape[0], Cov.shape[1]), dtype=dtype)
 
@@ -695,7 +757,7 @@ class MODEL:
         np.seterr(divide="ignore", invalid="ignore")
 
         Cov_df = self.covariance
-        Cov = Cov_df.to_numpy()
+        Cov = Cov_df.to_numpy(dtype="float64")
 
         # If the groups variables is empty, we return the entropy of every single variables and parameters
         if groups == []:
@@ -732,7 +794,7 @@ class MODEL:
         for key in dictionnary.keys():
             group = dictionnary[key]
             # We recreate a smaller covariance matrice with only the element of the group
-            Cov = Cov_df.loc[group, group].to_numpy()
+            Cov = Cov_df.loc[group, group].to_numpy(dtype="float64")
 
             entropy.at[key, "Entropy"] = (len(Cov) / 2) * np.log(
                 2 * np.pi * np.e
@@ -758,7 +820,7 @@ class MODEL:
         np.seterr(divide="ignore", invalid="ignore")
 
         Cov_df = self.covariance
-        Cov = Cov_df.to_numpy()
+        Cov = Cov_df.to_numpy(dtype="float64")
 
         # If the groups variables is empty, we return the joint entropy matrix of every single variables and parameters
         if groups == []:
@@ -793,7 +855,9 @@ class MODEL:
                 group1 = dictionnary[key1]
                 group2 = dictionnary[key2]
 
-                Cov = Cov_df.loc[group1 + group2, group1 + group2].to_numpy()
+                Cov = Cov_df.loc[group1 + group2, group1 + group2].to_numpy(
+                    dtype="float64"
+                )
 
                 joint_entropy.at[key1, key2] = (
                     len(group1) + len(group2) / 2
@@ -819,7 +883,7 @@ class MODEL:
         np.seterr(divide="ignore", invalid="ignore")
 
         Cov_df = self.covariance
-        Cov = Cov_df.to_numpy()
+        Cov = Cov_df.to_numpy(dtype="float64")
 
         # If the groups variables is empty, we return the joint entropy matrix of every single variables and parameters
         if groups == []:
@@ -855,10 +919,12 @@ class MODEL:
                 group2 = dictionnary[key2]
 
                 # Creating the sub_covariance matrix
-                Cov1 = Cov_df.loc[group1, group1].to_numpy()
-                Cov2 = Cov_df.loc[group2, group2].to_numpy()
+                Cov1 = Cov_df.loc[group1, group1].to_numpy(dtype="float64")
+                Cov2 = Cov_df.loc[group2, group2].to_numpy(dtype="float64")
                 # And the big one
-                Cov = Cov_df.loc[group1 + group2, group1 + group2].to_numpy()
+                Cov = Cov_df.loc[group1 + group2, group1 + group2].to_numpy(
+                    dtype="float64"
+                )
 
                 conditional_entropy.at[key1, key2] = (
                     len(Cov) / 2 * np.log(2 * np.pi * np.e)
@@ -928,9 +994,11 @@ class MODEL:
                 group1 = dictionnary[key1]
                 group2 = dictionnary[key2]
 
-                Cov_1 = Cov_df.loc[group1, group1].to_numpy()
-                Cov_2 = Cov_df.loc[group2, group2].to_numpy()
-                Cov_3 = Cov_df.loc[group1 + group2, group1 + group2].to_numpy()
+                Cov_1 = Cov_df.loc[group1, group1].to_numpy(dtype="float64")
+                Cov_2 = Cov_df.loc[group2, group2].to_numpy(dtype="float64")
+                Cov_3 = Cov_df.loc[group1 + group2, group1 + group2].to_numpy(
+                    dtype="float64"
+                )
 
                 MI.loc[key1, key2] = 0.5 * np.log(
                     np.linalg.det(Cov_1) * np.linalg.det(Cov_2) / np.linalg.det(Cov_3)
@@ -1054,9 +1122,15 @@ class MODEL:
                 mean_df.loc[element] = [0 for column in mean_df.columns]
 
         # We create intermediate matrix
-        Cov_ss = Cov_df.loc[elements_to_study, elements_to_study].to_numpy()
-        Cov_ff = Cov_df.loc[elements_to_fixe, elements_to_fixe].to_numpy()
-        Cov_sf = Cov_df.loc[elements_to_study, elements_to_fixe].to_numpy()
+        Cov_ss = Cov_df.loc[elements_to_study, elements_to_study].to_numpy(
+            dtype="float64"
+        )
+        Cov_ff = Cov_df.loc[elements_to_fixe, elements_to_fixe].to_numpy(
+            dtype="float64"
+        )
+        Cov_sf = Cov_df.loc[elements_to_study, elements_to_fixe].to_numpy(
+            dtype="float64"
+        )
         Cov_fr = Cov_sf.T
 
         # The targeted covariance matrix of the studied elements in the case where there is a fixed vector
@@ -1353,9 +1427,9 @@ class MODEL:
                 group_f = dictionary_f[key2]
 
                 # We create intermediate matrix
-                Cov_rr = Cov_df.loc[group_r, group_r].to_numpy()
-                Cov_ff = Cov_df.loc[group_f, group_f].to_numpy()
-                Cov_rf = Cov_df.loc[group_r, group_f].to_numpy()
+                Cov_rr = Cov_df.loc[group_r, group_r].to_numpy(dtype="float64")
+                Cov_ff = Cov_df.loc[group_f, group_f].to_numpy(dtype="float64")
+                Cov_rf = Cov_df.loc[group_r, group_f].to_numpy(dtype="float64")
                 Cov_fr = Cov_rf.T
 
                 # The targeted covariance matrix
@@ -1444,9 +1518,17 @@ class MODEL:
             self.metabolites.df.loc[f"meta_{0}", "External"] = True
             self.metabolites.df.loc[f"meta_{n-1}", "External"] = True
 
+            for reaction in self.Stoichio_matrix.columns:
+                self.elasticity.p.df.at[reaction, "Temperature"] = 0
+
+            self._update_elasticity()
+
     #############################################################################
     ##################   Function to read a CSV/XLS file  #######################
-    def read_CSV(self, file="./Exemples/XLS/ecoli_core_model.xls"):
+    def read_CSV(
+        self,
+        file="/home/alequertier/Documents/BadAss/Exemples/XLS/ecoli_core_model.xls",
+    ):
         ### Description of the fonction
         """
         Fonction read an Excel file
@@ -1474,7 +1556,7 @@ class MODEL:
     ###################   Function to read a SBML file  #########################
     def read_SBML(
         self,
-        directory="./Exemples/SBML/",
+        directory="/home/alequertier/Documents/BadAss/Exemples/SBML/",
         file_SBML="E_coli_CCM.xml",
         reference_state_metabolites="reference_state_metabolites.tsv",
         reference_state_c="reference_state_c.tsv",
@@ -1666,7 +1748,7 @@ class MODEL:
         """
         Function that check if the BadAss model is unstable
         """
-        eigen_values = np.linalg.eigvals(self.Jacobian.to_numpy())
+        eigen_values = np.linalg.eigvals(self.Jacobian.to_numpy(dtype="float64"))
 
         positif = False
         for value in eigen_values:
@@ -1722,7 +1804,7 @@ class MODEL:
 
         # Then we create a new matrix with only the index specified
         data_frame = data_frame.loc[index_to_keep_bis, index_to_keep_bis]
-        matrix = data_frame.to_numpy()
+        matrix = data_frame.to_numpy(dtype="float64")
 
         data_frame
 
@@ -2011,7 +2093,7 @@ class MODEL:
         else:
             data_frame = self.rho()
 
-        matrix_sampled = data_frame.to_numpy()
+        matrix_sampled = data_frame.to_numpy(dtype="float64")
 
         # Conditional line to deal with the seed of the random values generator
         # If seed_constant is an int, than we use this int as seed to generate the seed of other random value
@@ -2094,9 +2176,9 @@ class MODEL:
                     )
 
             if result == "MI":
-                matrix_sampled += self.MI().to_numpy()
+                matrix_sampled += self.MI().to_numpy(dtype="float64")
             else:
-                matrix_sampled += self.rho().to_numpy()
+                matrix_sampled += self.rho().to_numpy(dtype="float64")
 
         matrix_sampled /= N + 1
 
@@ -2124,7 +2206,7 @@ class MODEL:
             self.elasticity.s._df
         )
         self.__original_atributes["elasticities_p"] = copy.deepcopy(
-            self.elasticity.p._df
+            self.elasticity.p.__df
         )
         self.__original_atributes["enzymes"] = copy.deepcopy(self.enzymes.df)
 
@@ -2136,7 +2218,7 @@ class MODEL:
         self.reactions.df = self.__original_atributes["reactions"]
         self.parameters.df = self.__original_atributes["parameters"]
         self.elasticity.s._df = self.__original_atributes["elasticities_s"]
-        self.elasticity.p._df = self.__original_atributes["elasticities_p"]
+        self.elasticity.p.__df = self.__original_atributes["elasticities_p"]
         self.enzymes.df = self.__original_atributes["enzymes"]
 
     #############################################################################

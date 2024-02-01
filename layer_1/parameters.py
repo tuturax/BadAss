@@ -129,7 +129,7 @@ class Parameter_class:
         Fonction to consider all external metabolite as parameters
         """
         # For every metabolite of the model
-        missing_columns = []
+        missing_meta_ext = []
         for meta in self.__class_MODEL_instance.metabolites.df.index:
             # If this metabolite is external
             if self.__class_MODEL_instance.metabolites.df.at[meta, "External"] == True:
@@ -142,31 +142,24 @@ class Parameter_class:
                 if (
                     meta + "_para"
                 ) not in self.__class_MODEL_instance.elasticity.p.df.columns:
-                    missing_columns.append(meta + "_para")
+                    missing_meta_ext.append(meta)
                     # self.__class_MODEL_instance.elasticity.p.df[meta + "_para"] = 0.0
 
         # Then we add every columns at the elasticity matrix
-        if missing_columns:
-            new_columns = pd.DataFrame(
-                0,
-                columns=missing_columns,
-                index=self.__class_MODEL_instance.elasticity.p.df.index,
-            )
-            pd.concat(
-                [self.__class_MODEL_instance.elasticity.p.df, new_columns], axis=1
+        if missing_meta_ext != []:
+            # By creating a temporary dataframe with the external metabolite as columns
+            df_temporary = -0.5 * self.__class_MODEL_instance.N.loc[missing_meta_ext]
+            df_temporary.rename(index=lambda x: x + "_para")
+            df_temporary = df_temporary.T
+
+            self.__class_MODEL_instance.elasticity.p.df = pd.concat(
+                [self.__class_MODEL_instance.elasticity.p.df, df_temporary], axis=1
             )
 
         # Creation of a temporary dataframe with just the metabolite
         df_temporary = pd.DataFrame(
             index=self.__class_MODEL_instance.elasticity.p.df.index
         )
-
-        # For every metabolite
-        for meta in self.__class_MODEL_instance.metabolites.df.index:
-            if self.__class_MODEL_instance.metabolites.df.at[meta, "External"]:
-                df_temporary[meta] = (
-                    -0.5 * self.__class_MODEL_instance.Stoichio_matrix.loc[meta]
-                )
 
         self.__class_MODEL_instance.elasticity.p.df = pd.concat(
             [self.__class_MODEL_instance.elasticity.p.df, df_temporary], axis=1
