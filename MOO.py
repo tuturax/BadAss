@@ -256,7 +256,7 @@ def fitness_function(individual, args):
     # What we could change ?
     # Regulation Arrow (boolean)
     # Concentration of metabolite in the reference state ( discuss about it)
-
+    # Stauration values
     # Elasticity
     my_model.elasticity.p.df = np.array(individual).reshape(args["shape"])
 

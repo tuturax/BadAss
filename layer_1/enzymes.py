@@ -28,7 +28,7 @@ class Enzymes_class:
         return len(self.df)
 
     #################################################################################
-    #########           Fonction to add a enzyme                         ##########
+    #########            Fonction to add an enzyme                         ##########
     def add(self, name="", mean=1, reaction_linked=[]) -> None:
         ### Description of the fonction
         """
@@ -45,7 +45,7 @@ class Enzymes_class:
             self.df.loc[name] = [mean, reaction_linked]
 
     #################################################################################
-    #########           Fonction to remove a enzyme                      ##########
+    #########           Fonction to remove an enzyme                       ##########
 
     def remove(self, name: str) -> None:
         ### Description of the fonction
@@ -56,8 +56,10 @@ class Enzymes_class:
         """
 
         # Look if the enzyme is in the model
-        if name not in self.df.index.to_list():
-            raise TypeError("Please enter a valide name \n")
+        if name not in self.df.index:
+            raise NameError(
+                f"The enzyme {name} is not in the enzyme dataframe, please enter a valide name \n"
+            )
 
         else:
             # Else, the enzyme is remove from the dataframe

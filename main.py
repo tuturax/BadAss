@@ -4,22 +4,37 @@ Created on Tue Sep 26 08:26:49 2023
 Script for the creation of metabolic network and study of transmition of information throught it.
 
 @author: tuturax (Arthur Lequertier)
+INRAE, MaIAGE
 """
 
-#####################
-# Library
-#####################
+##################################################################################
+#                                                                                #
+#                                   Library                                      #
+#                                                                                #
+##################################################################################
+
 import numpy as np
 import pandas as pd
 import sympy
 from scipy.linalg import expm
 
+# Graphic interface
+import tkinter as tk
+from tkinter import ttk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.widgets import Slider, CheckButtons
+
+import matplotlib
+import matplotlib.pyplot as plt
+
+# Importation of the module of the sub-Class
 from layer_1.reactions import Reaction_class
 from layer_1.metabolites import Metabolite_class
 from layer_1.parameters import Parameter_class
 from layer_1.elasticities import Elasticity_class
 from layer_1.enzymes import Enzymes_class
 from layer_1.regulation import Regulation_class
+from layer_1.operon import Operon_class
 
 
 #####################
@@ -36,6 +51,11 @@ class MODEL:
     #############################################################################
     #############             Initialisation                #####################
     def __init__(self):
+
+        ################################
+        #  Call of the sub-Class and definition of private attribute
+        ################################
+
         # Call of reaction Class
         self.__reactions = Reaction_class(self)
         # Call of metabolite Class
@@ -48,6 +68,12 @@ class MODEL:
         self.__enzymes = Enzymes_class(self)
         # Call of regulation Class
         self.__regulations = Regulation_class(self)
+        # Call of operon Class
+        self.__operons = Operon_class(self)
+
+        ################################
+        #  Initialisation of few variables of the model
+        ################################
 
         # Initialisation of the Matrix_Stoechio attribute
         self._Stoichio_matrix = pd.DataFrame()
@@ -57,11 +83,9 @@ class MODEL:
             columns=["Name", "Type", "Mean", "Standard deviation", "Distribution"]
         )
 
+        # Frequency of the system
         self.__frequency_omega = 0.0
 
-        print(
-            "Model created \n \nTo add metabolite, use .metabolites.add_meta \nTo add reaction,   use .reactions.add_reaction"
-        )
         # Cache of the Network
         self.__cache_Link_matrix = None
         self.__cache_Reduced_Stoichio_matrix = None
@@ -74,6 +98,14 @@ class MODEL:
         self.__cache_R_v_p = None
         self.__cache_R_s_c = None
         self.__cache_R_v_p = None
+
+        ################################
+        #  Message display when the model is created
+        ################################
+
+        print(
+            "Model created \n \nTo add metabolite, use .metabolites.add_meta \nTo add reaction,   use .reactions.add_reaction"
+        )
 
     #################################################################################
     ######    Representation = the Dataframe of the Stoichiometric matrix     #######
@@ -123,20 +155,24 @@ class MODEL:
         self.__frequency_omega = omega
 
     @property
+    def metabolites(self):
+        return self.__metabolites
+
+    @property
     def reactions(self):
         return self.__reactions
 
     @property
-    def metabolites(self):
-        return self.__metabolites
+    def parameters(self):
+        return self.__parameters
 
     @property
     def enzymes(self):
         return self.__enzymes
 
     @property
-    def parameters(self):
-        return self.__parameters
+    def operons(self):
+        return self.__operons
 
     @property
     def regulations(self):
@@ -181,6 +217,25 @@ class MODEL:
 
         return (self.__cache_Link_matrix, self.__cache_Reduced_Stoichio_matrix)
 
+
+
+
+
+
+
+
+
+
+    ######################################################################################
+    #                                                                                    #
+    # stoichio_matrix # Jacobian # elasticity # response_coeff # covariance # entropy MI #
+    #                                                                                    #
+    ######################################################################################
+    #                                                                                    #
+    #                                    COMPUTATION                                     #
+    #                                                                                    #
+    ######################################################################################
+
     # The attibute with __ are the one compute with numpy and aims to be call for other compuation
     # The attribute without it are only the representation of the them on dataframe
 
@@ -204,9 +259,7 @@ class MODEL:
             if self.frequency_omega != 0:
                 self.__cache_Jacobian = (
                     self.__cache_Jacobian
-                    - np.identity(len(self.__cache_Jacobian), dtype=complex)
-                    * self.frequency_omega
-                    * 1j
+                    - np.identity(len(self.__cache_Jacobian), dtype=complex) * self.frequency_omega * 1j
                 )
         return self.__cache_Jacobian
 
@@ -318,9 +371,7 @@ class MODEL:
     @property  # Core
     def __R_v_c(self):
         if self.__cache_R_v_c is None:
-            self.__cache_R_v_c = np.dot(
-                self.elasticity.s.df.to_numpy(dtype="float64"), self.__R_s_c
-            )
+            self.__cache_R_v_c = np.dot(self.elasticity.s.df.to_numpy(dtype="float64"), self.__R_s_c)
         return self.__cache_R_v_c
 
     @property  # Displayed
@@ -368,9 +419,7 @@ class MODEL:
             covariance_dp = np.identity(len(self.__Standard_deviations))
 
             for i, parameter in enumerate(self.parameters.df.index):
-                covariance_dp[i][i] = (
-                    self.parameters.df.at[parameter, "Standard deviation"] ** 2
-                )
+                covariance_dp[i][i] = self.parameters.df.at[parameter, "Standard deviation"] ** 2
 
             matrix_RC = np.dot(R, covariance_dp)
 
@@ -402,10 +451,7 @@ class MODEL:
         if self.__cache_h is None:
             vec_h = []
             for index in self.covariance.index:
-                vec_h.append(
-                    0.5 * np.log(2 * np.pi * np.e * self.covariance.at[index, index])
-                    + 0.5
-                )
+                vec_h.append(0.5 * np.log(2 * np.pi * np.e * self.covariance.at[index, index]) + 0.5)
 
             self.__cache_h = vec_h
 
@@ -413,9 +459,7 @@ class MODEL:
 
     @property  # Displayed
     def entropy(self):
-        return pd.DataFrame(
-            self.__entropy, index=self.covariance.index, columns=["Entropy"]
-        )
+        return pd.DataFrame(self.__entropy, index=self.covariance.index, columns=["Entropy"])
 
     ######################
     # Joint entropy matrix
@@ -525,9 +569,7 @@ class MODEL:
         )
 
     def temporal_R_s_p(self, t=0.0):
-        return np.dot(
-            self.temporal_C_s_p(t), self.elasticity.p.df.to_numpy(dtype="float64")
-        )
+        return np.dot(self.temporal_C_s_p(t), self.elasticity.p.df.to_numpy(dtype="float64"))
 
     def temporal_C_v_p(self, t=0.0):
         L, N_r = self.Link_matrix
@@ -536,9 +578,7 @@ class MODEL:
             np.dot(
                 np.dot(
                     self.elasticity.s.df.to_numpy(dtype="float64"),
-                    np.dot(
-                        L, expm(self.Jacobian * t) - np.identity(len(self.Jacobian))
-                    ),
+                    np.dot(L, expm(self.Jacobian * t) - np.identity(len(self.Jacobian))),
                 ),
                 self.Jacobian_reversed,
             ),
@@ -546,9 +586,7 @@ class MODEL:
         ) + np.identity(self.N.shape[1])
 
     def temporal_R_v_p(self, t=0.0):
-        return np.dot(
-            self.temporal_C_v_p(t), self.elasticity.p.df.to_numpy(dtype="float64")
-        )
+        return np.dot(self.temporal_C_v_p(t), self.elasticity.p.df.to_numpy(dtype="float64"))
 
     ###########################################################################
     ############  Function to find where the variable name is  ################
@@ -686,9 +724,8 @@ class MODEL:
         if self.elasticity.s.df.columns.size != 0:
             for reaction in self.reactions.df.index:
                 if reaction not in self.elasticity.s.df.index:
-                    self.elasticity.s.df.loc[reaction] = [
-                        0 for i in self.elasticity.s.df.columns
-                    ]
+                    self.elasticity.s.df.loc[reaction] = [0 for i in self.elasticity.s.df.columns]
+
         # Reset of the thermodynamic sub-matrix of the E_s elasticity matrix
         colonnes = self.elasticity.s.df.columns
         index = self.elasticity.s.df.index
@@ -696,7 +733,7 @@ class MODEL:
         self.elasticity.s.enzyme = pd.DataFrame(0, columns=colonnes, index=index)
         self.elasticity.s.regulation = pd.DataFrame(0, columns=colonnes, index=index)
 
-        ###
+        ##################################
         # Then we deal with the parameters
 
         missing_para = []
@@ -716,7 +753,28 @@ class MODEL:
                 para_to_remove_from_E_p.append(para)
         self.elasticity.p.remove_columns(para_to_remove_from_E_p)
 
+        # Special case when there is no reaction
+        # Pandas doesn't allow to add line before at least 1 column is add
+        if self.elasticity.p.df.columns.size != 0:
+            for reaction in self.reactions.df.index:
+                if reaction not in self.elasticity.p.df.index:
+                    self.elasticity.p.df.loc[reaction] = [0 for i in self.elasticity.p.df.columns]
+
         self._reset_value()
+
+
+
+
+
+    ########################################################################################
+    #                                                                                      #
+    # grouped # MI # fixed # rho # joint # entropy # conditional # objectif # MI # entropy #
+    #                                                                                      #
+    ########################################################################################
+    #                                                                                      #
+    #                                       STUDY                                          #
+    #                                                                                      #
+    ########################################################################################
 
     #################################################################################
     ############     Function that return the correlation coefficient    ############
@@ -781,14 +839,10 @@ class MODEL:
             for variable in group:
                 # if the variable is not in the model, we raise an error
                 if variable not in Cov_df.index:
-                    raise NameError(
-                        f"The variables {variable} is not in the covariance matrix !"
-                    )
+                    raise NameError(f"The variables {variable} is not in the covariance matrix !")
 
         # Initialisation of the MI matrix
-        entropy = pd.DataFrame(
-            index=dictionnary.keys(), columns=["Entropy"], dtype=float
-        )
+        entropy = pd.DataFrame(index=dictionnary.keys(), columns=["Entropy"], dtype=float)
 
         # For each group (= key of dictionnary)
         for key in dictionnary.keys():
@@ -796,9 +850,9 @@ class MODEL:
             # We recreate a smaller covariance matrice with only the element of the group
             Cov = Cov_df.loc[group, group].to_numpy(dtype="float64")
 
-            entropy.at[key, "Entropy"] = (len(Cov) / 2) * np.log(
-                2 * np.pi * np.e
-            ) + 0.5 * np.log(np.linalg.det(Cov))
+            entropy.at[key, "Entropy"] = (len(Cov) / 2) * np.log(2 * np.pi * np.e) + 0.5 * np.log(
+                np.linalg.det(Cov)
+            )
 
         # Line to retablish the warning
         np.seterr(divide="warn", invalid="warn")
@@ -840,14 +894,10 @@ class MODEL:
             group = dictionnary[key]
             for variable in group:
                 if variable not in Cov_df.index:
-                    raise NameError(
-                        f"The variables {variable} is not in the covariance matrix !"
-                    )
+                    raise NameError(f"The variables {variable} is not in the covariance matrix !")
 
         # Initialisation of the MI matrix
-        joint_entropy = pd.DataFrame(
-            index=dictionnary.keys(), columns=dictionnary.keys(), dtype=float
-        )
+        joint_entropy = pd.DataFrame(index=dictionnary.keys(), columns=dictionnary.keys(), dtype=float)
 
         for key1 in dictionnary.keys():
             for key2 in dictionnary.keys():
@@ -855,13 +905,11 @@ class MODEL:
                 group1 = dictionnary[key1]
                 group2 = dictionnary[key2]
 
-                Cov = Cov_df.loc[group1 + group2, group1 + group2].to_numpy(
-                    dtype="float64"
-                )
+                Cov = Cov_df.loc[group1 + group2, group1 + group2].to_numpy(dtype="float64")
 
-                joint_entropy.at[key1, key2] = (
-                    len(group1) + len(group2) / 2
-                ) ** np.log(2 * np.pi * np.e) + 0.5 * np.log(np.linalg.det(Cov))
+                joint_entropy.at[key1, key2] = (len(group1) + len(group2) / 2) ** np.log(
+                    2 * np.pi * np.e
+                ) + 0.5 * np.log(np.linalg.det(Cov))
 
         # Line to retablish the warning
         np.seterr(divide="warn", invalid="warn")
@@ -903,14 +951,10 @@ class MODEL:
             group = dictionnary[key]
             for variable in group:
                 if variable not in Cov_df.index:
-                    raise NameError(
-                        f"The variables {variable} is not in the covariance matrix !"
-                    )
+                    raise NameError(f"The variables {variable} is not in the covariance matrix !")
 
         # Initialisation of the MI matrix
-        conditional_entropy = pd.DataFrame(
-            index=dictionnary.keys(), columns=dictionnary.keys(), dtype=float
-        )
+        conditional_entropy = pd.DataFrame(index=dictionnary.keys(), columns=dictionnary.keys(), dtype=float)
 
         for key1 in dictionnary.keys():
             for key2 in dictionnary.keys():
@@ -922,9 +966,7 @@ class MODEL:
                 Cov1 = Cov_df.loc[group1, group1].to_numpy(dtype="float64")
                 Cov2 = Cov_df.loc[group2, group2].to_numpy(dtype="float64")
                 # And the big one
-                Cov = Cov_df.loc[group1 + group2, group1 + group2].to_numpy(
-                    dtype="float64"
-                )
+                Cov = Cov_df.loc[group1 + group2, group1 + group2].to_numpy(dtype="float64")
 
                 conditional_entropy.at[key1, key2] = (
                     len(Cov) / 2 * np.log(2 * np.pi * np.e)
@@ -979,14 +1021,10 @@ class MODEL:
             group = dictionnary[key]
             for variable in group:
                 if variable not in Cov_df.index:
-                    raise NameError(
-                        f"The variables {variable} is not in the covariance matrix !"
-                    )
+                    raise NameError(f"The variables {variable} is not in the covariance matrix !")
 
         # Initialisation of the MI matrix
-        MI = pd.DataFrame(
-            index=dictionnary.keys(), columns=dictionnary.keys(), dtype=float
-        )
+        MI = pd.DataFrame(index=dictionnary.keys(), columns=dictionnary.keys(), dtype=float)
 
         for key1 in dictionnary.keys():
             for key2 in dictionnary.keys():
@@ -996,9 +1034,7 @@ class MODEL:
 
                 Cov_1 = Cov_df.loc[group1, group1].to_numpy(dtype="float64")
                 Cov_2 = Cov_df.loc[group2, group2].to_numpy(dtype="float64")
-                Cov_3 = Cov_df.loc[group1 + group2, group1 + group2].to_numpy(
-                    dtype="float64"
-                )
+                Cov_3 = Cov_df.loc[group1 + group2, group1 + group2].to_numpy(dtype="float64")
 
                 MI.loc[key1, key2] = 0.5 * np.log(
                     np.linalg.det(Cov_1) * np.linalg.det(Cov_2) / np.linalg.det(Cov_3)
@@ -1090,9 +1126,7 @@ class MODEL:
             new_mean_fixed = old_mean_fixed
 
         elif not isinstance(new_mean_fixed, list):
-            raise TypeError(
-                f"The input argument 'new_mean_vector' must be a list of number !"
-            )
+            raise TypeError(f"The input argument 'new_mean_vector' must be a list of number !")
 
         elif len(new_mean_fixed) != len(elements_to_fixe):
             raise ValueError(
@@ -1106,9 +1140,7 @@ class MODEL:
         # Computation
 
         # Initialisation of the MI matrix
-        entropy = pd.DataFrame(
-            index=elements_to_study, columns=elements_to_fixe, dtype=float
-        )
+        entropy = pd.DataFrame(index=elements_to_study, columns=elements_to_fixe, dtype=float)
 
         # Special line for return of all variable
         if return_all == True:
@@ -1122,24 +1154,16 @@ class MODEL:
                 mean_df.loc[element] = [0 for column in mean_df.columns]
 
         # We create intermediate matrix
-        Cov_ss = Cov_df.loc[elements_to_study, elements_to_study].to_numpy(
-            dtype="float64"
-        )
-        Cov_ff = Cov_df.loc[elements_to_fixe, elements_to_fixe].to_numpy(
-            dtype="float64"
-        )
-        Cov_sf = Cov_df.loc[elements_to_study, elements_to_fixe].to_numpy(
-            dtype="float64"
-        )
+        Cov_ss = Cov_df.loc[elements_to_study, elements_to_study].to_numpy(dtype="float64")
+        Cov_ff = Cov_df.loc[elements_to_fixe, elements_to_fixe].to_numpy(dtype="float64")
+        Cov_sf = Cov_df.loc[elements_to_study, elements_to_fixe].to_numpy(dtype="float64")
         Cov_fr = Cov_sf.T
 
         # The targeted covariance matrix of the studied elements in the case where there is a fixed vector
         Cov_ss_f = Cov_ss - np.dot(Cov_sf, np.dot(np.linalg.inv(Cov_ff), Cov_fr))
 
         # New entropy of the studied elements with the fixed vector
-        entropy = len(Cov_ss) / 2 * np.log(2 * np.pi * np.e) + np.log(
-            np.linalg.det(Cov_ss_f)
-        )
+        entropy = len(Cov_ss) / 2 * np.log(2 * np.pi * np.e) + np.log(np.linalg.det(Cov_ss_f))
 
         # If the elements are fixed to an other values that the mean, the mean of the study elements change too !
         delta_mean_study = np.dot(
@@ -1156,14 +1180,10 @@ class MODEL:
         # Case where we must return all variable and plot
         if return_all == True or plot == True:
             # We transform the final covariance matrix to dataframe
-            Cov_ss_f_df = pd.DataFrame(
-                Cov_ss_f, index=elements_to_study, columns=elements_to_study
-            )
+            Cov_ss_f_df = pd.DataFrame(Cov_ss_f, index=elements_to_study, columns=elements_to_study)
 
             # And the new mean too
-            delta_mean_study_df = pd.DataFrame(
-                delta_mean_study, index=elements_to_study, columns=["Delta"]
-            )
+            delta_mean_study_df = pd.DataFrame(delta_mean_study, index=elements_to_study, columns=["Delta"])
 
             # For every variables/parameters study
             for element in elements_to_study:
@@ -1174,18 +1194,13 @@ class MODEL:
 
                 # Then the new ones after to fixe the vector
                 SD_df.at[element, "New SD"] = np.sqrt(Cov_ss_f_df.at[element, element])
-                mean_df.at[element, "New mean"] = (
-                    delta_mean_study_df.at[element, "Delta"] + old_mean_study
-                )
+                mean_df.at[element, "New mean"] = delta_mean_study_df.at[element, "Delta"] + old_mean_study
 
                 # And we also look for the difference
                 SD_df.at[element, "Delta SD"] = np.abs(
-                    np.sqrt(Cov_df.at[element, element])
-                    - np.sqrt(Cov_ss_f_df.at[element, element])
+                    np.sqrt(Cov_df.at[element, element]) - np.sqrt(Cov_ss_f_df.at[element, element])
                 )
-                mean_df.at[element, "Delta mean"] = delta_mean_study_df.at[
-                    element, "Delta"
-                ]
+                mean_df.at[element, "Delta mean"] = delta_mean_study_df.at[element, "Delta"]
 
             if plot == True:
                 # Importation of the necessary module
@@ -1209,10 +1224,8 @@ class MODEL:
                     # The old boxplot
                     data_plot.append(
                         [
-                            mean_df.at[element, "Old mean"]
-                            + SD_df.at[element, "Old SD"],
-                            mean_df.at[element, "Old mean"]
-                            - SD_df.at[element, "Old SD"],
+                            mean_df.at[element, "Old mean"] + SD_df.at[element, "Old SD"],
+                            mean_df.at[element, "Old mean"] - SD_df.at[element, "Old SD"],
                         ]
                     )
                     positions_box.append(2 * i - 0.3)
@@ -1223,10 +1236,8 @@ class MODEL:
                     # The new boxplot
                     data_plot.append(
                         [
-                            mean_df.at[element, "New mean"]
-                            + SD_df.at[element, "New SD"],
-                            mean_df.at[element, "New mean"]
-                            - SD_df.at[element, "New SD"],
+                            mean_df.at[element, "New mean"] + SD_df.at[element, "New SD"],
+                            mean_df.at[element, "New mean"] - SD_df.at[element, "New SD"],
                         ]
                     )
                     positions_box.append(2 * i + 0.3)
@@ -1481,6 +1492,181 @@ class MODEL:
         )
         return MI
 
+
+
+
+
+
+
+
+
+    ################################################################################
+    #                                                                              #
+    # linear # SBML # XML # Cobra # JSON # CSV # Check # unstable # driving-forces #
+    #                                                                              #
+    ################################################################################
+    #                                                                              #
+    #                              PLOT OF FIGURE                                  #
+    #                                                                              #
+    ################################################################################
+
+
+
+
+    #############################################################################
+    ###################   Function plot the MI matrix   #########################
+    def plot(self, result="MI", title="", label=False, value_in_cell=False, index_to_keep=[]):
+        """
+        Fonction to plot a heatmap of the mutual information
+
+        result     :  specify the data ploted MI/rho/cov
+
+        """
+
+        # Get the dataframe of the result
+        result = result.lower()
+
+        if result == "mi" or result == "mutual information":
+            data_frame = self.group_MI()
+        elif result == "rho" or result == "correlation":
+            data_frame = self.rho()
+        elif result == "cov" or result == "covariance":
+            data_frame = self.covariance
+
+        # Look the index to keep for the plot of the matrix
+        index_to_keep_bis = []
+        # If nothing is specified, we keep everything
+        # else
+        if index_to_keep != []:
+            # We take a look at every index that the user enter
+            for index in index_to_keep:
+                # If one of them is not in the model, we told him
+                if index not in data_frame.index:
+                    raise NameError(f"- {index} is not in the correlation matrix")
+                # else, we keep in memory the index that are in the model
+                else:
+                    index_to_keep_bis.append(index)
+
+        else:
+            index_to_keep_bis = data_frame.index
+
+        # Then we create a new matrix with only the index specified
+        data_frame = data_frame.loc[index_to_keep_bis, index_to_keep_bis]
+        matrix = data_frame.to_numpy(dtype="float64")
+
+        data_frame
+
+        fig, ax = plt.subplots()
+
+        if result == "mi":
+            custom_map = matplotlib.colors.LinearSegmentedColormap.from_list("custom", ["white", "blue"])
+
+            im = plt.imshow(matrix, cmap=custom_map, norm=matplotlib.colors.LogNorm())
+
+        elif result == "rho":
+            custom_map = matplotlib.colors.LinearSegmentedColormap.from_list("custom", ["red", "white", "blue"])
+
+            im = plt.imshow(matrix, cmap=custom_map, vmin=-1, vmax=1)
+
+        elif result == "cov":
+            custom_map = matplotlib.colors.LinearSegmentedColormap.from_list("custom", ["white", "blue"])
+
+            im = plt.imshow(matrix, cmap=custom_map)
+
+        # Display the label next to the axis
+        if label == True:
+            ax.set_xticks(np.arange(len(data_frame.index)), labels=data_frame.index)
+            ax.set_yticks(np.arange(len(data_frame.index)), labels=data_frame.index)
+
+            plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
+
+        # Display the value of each cell
+        if value_in_cell == True:
+            for i in range(matrix.shape[0]):
+                for j in range(matrix.shape[1]):
+                    text = ax.text(
+                        j,
+                        i,
+                        round(matrix[i, j], 2),
+                        ha="center",
+                        va="center",
+                        color="black",
+                    )
+
+        if title == "":
+            if result.lower() == "mi":
+                title = "Mutual information"
+            elif result.lower() == "rho":
+                title = "Correlation"
+
+        # Title of the plot
+        ax.set_title(title)
+        fig.tight_layout()
+
+        # Plot of the black line to separate the parameters from the variables
+        # Width of the line
+        line_width = 1
+        # Number of parameters
+        N_para = self.parameters.df.shape[0]
+        # Position of the line
+        x_p_e = [-0.5, N_para - 0.5]
+        y_p_e = [N_para - 0.5, N_para - 0.5]
+        plt.plot(x_p_e, y_p_e, "black", linewidth=line_width)
+        plt.plot(y_p_e, x_p_e, "black", linewidth=line_width)
+
+        x_p = [-0.5, N_para - 0.5]
+        y_p = [N_para - 0.5, N_para - 0.5]
+        plt.plot(x_p, y_p, "black", linewidth=line_width)
+        plt.plot(y_p, x_p, "black", linewidth=line_width)
+
+        plt.colorbar()
+        plt.show()
+
+    #############################################################################
+    ###################   Function plot the boxplot   #########################
+    def boxplot(self, fixed: str, study=[]):
+        """
+        Fonction to plot a boxplot
+
+        """
+        # Fisrt, we check if the studied variables are all in the model
+        # The case where the user enter something
+        if study != []:
+            for name in study:
+                if name not in self.covariance.index:
+                    raise NameError(f"The name variable {name} is not in the model !")
+            names = study
+
+        # The default case where the variable "study" = [] => we take every variable of the model as things we study
+        elif study == []:
+            names = self.covariance.index
+
+        # Same for the fixed variable
+        if fixed not in self.covariance.index:
+            raise NameError(f"The input fixed variable '{fixed}' is not in the model !")
+
+        # Then we recover the values that we want to plot
+
+        # First, the data before to fixe :
+
+        # Then we begin to buil the plot
+        # The color of the box
+        color_original = "blue"
+        color_fixed = "red"
+
+        # The value of the original distribution
+        SD_original = self.__Standard_deviations
+
+    ################################################################################
+    #                                                                              #
+    # linear # SBML # XML # Cobra # JSON # CSV # Check # unstable # driving-forces #
+    #                                                                              #
+    ################################################################################
+    #                                                                              #
+    #                      CREATION & LOAD OF EXISTING MODEL                       #
+    #                                                                              #
+    ################################################################################
+
     #############################################################################
     ###############  Function to creat a simple linear network ##################
     def creat_linear(self, n: int):
@@ -1511,9 +1697,7 @@ class MODEL:
             noms_colonnes = [f"reaction_{i}" for i in range(n - 1)]
 
             # Attribution of the new stoichiometic matrix
-            self.Stoichio_matrix = pd.DataFrame(
-                matrix, index=noms_lignes, columns=noms_colonnes
-            )
+            self.Stoichio_matrix = pd.DataFrame(matrix, index=noms_lignes, columns=noms_colonnes)
 
             self.metabolites.df.loc[f"meta_{0}", "External"] = True
             self.metabolites.df.loc[f"meta_{n-1}", "External"] = True
@@ -1525,10 +1709,7 @@ class MODEL:
 
     #############################################################################
     ##################   Function to read a CSV/XLS file  #######################
-    def read_CSV(
-        self,
-        file="/home/alequertier/Documents/BadAss/Exemples/XLS/ecoli_core_model.xls",
-    ):
+    def read_CSV(self, file="/home/alequertier/Documents/BadAss/Exemples/XLS/ecoli_core_model.xls"):
         ### Description of the fonction
         """
         Fonction read an Excel file
@@ -1638,9 +1819,7 @@ class MODEL:
                     list_species.append(specie.getName())
                 for specie in list_species:
                     if specie not in N.index:
-                        N.loc[specie] = pd.Series(
-                            [0] * len(N.columns), index=N.columns, dtype="float64"
-                        )
+                        N.loc[specie] = pd.Series([0] * len(N.columns), index=N.columns, dtype="float64")
 
                 N.fillna(0, inplace=True)
 
@@ -1671,9 +1850,9 @@ class MODEL:
                 for i in range(len(list_metabolites)):
                     if list_metabolites[i] in self.metabolites.df.index:
                         # Attribution of the concentrations to the dataframe
-                        self.metabolites.df.at[
-                            list_metabolites[i], "Concentration (mmol/gDW)"
-                        ] = float(list_concentrations[i])
+                        self.metabolites.df.at[list_metabolites[i], "Concentration (mmol/gDW)"] = float(
+                            list_concentrations[i]
+                        )
                     else:
                         print(
                             f"Warning : The metabolite {list_metabolites[i]} is not in the SBML file of the metabolic network !"
@@ -1687,9 +1866,7 @@ class MODEL:
                 for i in range(len(list_reactions)):
                     if list_reactions[i] in self.reactions.df.index:
                         # Attribution of the flux to the dataframe
-                        self.reactions.df.at[
-                            list_reactions[i], "Flux (mmol/gDW/h)"
-                        ] = float(list_flux[i])
+                        self.reactions.df.at[list_reactions[i], "Flux (mmol/gDW/h)"] = float(list_flux[i])
                     else:
                         print(
                             f"Warning : The reaction {list_reactions[i]} is not in the SBML file of the metabolic network !"
@@ -1701,16 +1878,14 @@ class MODEL:
                 for i in range(len(list_reactions)):
                     if list_reactions[i] in self.reactions.df.index:
                         # Attributon of the keq to the dataframe
-                        self.reactions.df.at[
-                            list_reactions[i], "Equilibrium constant"
-                        ] = float(list_keq[i])
+                        self.reactions.df.at[list_reactions[i], "Equilibrium constant"] = float(list_keq[i])
 
     #############################################################################
     ###################   Function to check the model   #########################
     @property
     def check(self):
         """
-        Function to check the BadAss model
+        Function to check the use of elements of the BadAss model
         """
         # Check the reaction
         unused_reactions = []
@@ -1742,7 +1917,7 @@ class MODEL:
         return (unused_reactions, unused_metabolites)
 
     #############################################################################
-    ###################   Function to check the model   #########################
+    ##########   Function to check the jacobian of the model   ##################
     @property
     def check_unstable(self):
         """
@@ -1756,172 +1931,42 @@ class MODEL:
                 positif = True
 
         if positif == True:
-            print(
-                "The jacobian matrix have positive eigen values, that could lead to an unstable state"
-            )
+            print("The jacobian matrix have positives eigen values, that could lead to an unstable state")
         return eigen_values
 
     #############################################################################
-    ###################   Function plot the MI matrix   #########################
-    def plot(
-        self, result="MI", title="", label=False, value_in_cell=False, index_to_keep=[]
-    ):
+    #########   Function to check the driving forces of the model   #############
+    @property
+    def check_driving_forces(self):
         """
-        Fonction to plot a heatmap of the mutual information
-
-        result     :  specify the data ploted MI/rho/cov
-
+        Function that check if the driving force of reaction and the k_eq have the same sign
         """
-        import matplotlib
-        import matplotlib.pyplot as plt
+        dataframe_reaction = pd.DataFrame(
+            index=self.reactions.df.index,
+            columns=["Driving force", "Flux (mmol/gDW/h)", "Consistency"],
+        )
 
-        # Get the dataframe of the result
-        result = result.lower()
+        vector_k_eq = self.reactions.df["Equilibrium constant"]
+        vector_c = self.metabolites.df["Concentration (mmol/gDW)"]
 
-        if result == "mi" or result == "mutual information":
-            data_frame = self.group_MI()
-        elif result == "rho" or result == "correlation":
-            data_frame = self.rho()
-        elif result == "cov" or result == "covariance":
-            data_frame = self.covariance
+        vector_driving_force = np.log(vector_k_eq) - np.dot(self.__Stoichio_matrix.T, np.log(vector_c))
+        dataframe_reaction["Driving force"] = vector_driving_force
+        dataframe_reaction["Flux (mmol/gDW/h)"] = self.reactions.df["Flux (mmol/gDW/h)"]
+        dataframe_reaction["Consistency"] = False
 
-        # Look the index to keep for the plot of the matrix
-        index_to_keep_bis = []
-        # If nothing is specified, we keep everything
-        # else
-        if index_to_keep != []:
-            # We take a look at every index that the user enter
-            for index in index_to_keep:
-                # If one of them is not in the model, we told him
-                if index not in data_frame.index:
-                    raise NameError(f"- {index} is not in the correlation matrix")
-                # else, we keep in memory the index that are in the model
-                else:
-                    index_to_keep_bis.append(index)
+        for index in dataframe_reaction.index:
+            if (
+                dataframe_reaction.at[index, "Driving force"]
+                * dataframe_reaction.at[index, "Flux (mmol/gDW/h)"]
+                >= 0
+            ):
+                dataframe_reaction.at[index, "Consistency"] = True
 
-        else:
-            index_to_keep_bis = data_frame.index
-
-        # Then we create a new matrix with only the index specified
-        data_frame = data_frame.loc[index_to_keep_bis, index_to_keep_bis]
-        matrix = data_frame.to_numpy(dtype="float64")
-
-        data_frame
-
-        fig, ax = plt.subplots()
-
-        if result == "mi":
-            custom_map = matplotlib.colors.LinearSegmentedColormap.from_list(
-                "custom", ["white", "blue"]
-            )
-
-            im = plt.imshow(matrix, cmap=custom_map, norm=matplotlib.colors.LogNorm())
-
-        elif result == "rho":
-            custom_map = matplotlib.colors.LinearSegmentedColormap.from_list(
-                "custom", ["red", "white", "blue"]
-            )
-
-            im = plt.imshow(matrix, cmap=custom_map, vmin=-1, vmax=1)
-
-        elif result == "cov":
-            custom_map = matplotlib.colors.LinearSegmentedColormap.from_list(
-                "custom", ["white", "blue"]
-            )
-
-            im = plt.imshow(matrix, cmap=custom_map)
-
-        # Display the label next to the axis
-        if label == True:
-            ax.set_xticks(np.arange(len(data_frame.index)), labels=data_frame.index)
-            ax.set_yticks(np.arange(len(data_frame.index)), labels=data_frame.index)
-
-            plt.setp(
-                ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor"
-            )
-
-        # Display the value of each cell
-        if value_in_cell == True:
-            for i in range(matrix.shape[0]):
-                for j in range(matrix.shape[1]):
-                    text = ax.text(
-                        j,
-                        i,
-                        round(matrix[i, j], 2),
-                        ha="center",
-                        va="center",
-                        color="black",
-                    )
-
-        if title == "":
-            if result.lower() == "mi":
-                title = "Mutual information"
-            elif result.lower() == "rho":
-                title = "Correlation"
-
-        # Title of the plot
-        ax.set_title(title)
-        fig.tight_layout()
-
-        # Plot of the black line to separate the parameters from the variables
-        # Width of the line
-        line_width = 1
-        # Number of parameters
-        N_para = self.parameters.df.shape[0]
-        # Position of the line
-        x_p_e = [-0.5, N_para - 0.5]
-        y_p_e = [N_para - 0.5, N_para - 0.5]
-        plt.plot(x_p_e, y_p_e, "black", linewidth=line_width)
-        plt.plot(y_p_e, x_p_e, "black", linewidth=line_width)
-
-        x_p = [-0.5, N_para - 0.5]
-        y_p = [N_para - 0.5, N_para - 0.5]
-        plt.plot(x_p, y_p, "black", linewidth=line_width)
-        plt.plot(y_p, x_p, "black", linewidth=line_width)
-
-        plt.colorbar()
-        plt.show()
-
-    #############################################################################
-    ###################   Function plot the boxplot   #########################
-    def boxplot(self, fixed: str, study=[]):
-        """
-        Fonction to plot a boxplot
-
-        """
-        # Fisrt, we check if the studied variables are all in the model
-        # The case where the user enter something
-        if study != []:
-            for name in study:
-                if name not in self.covariance.index:
-                    raise NameError(f"The name variable {name} is not in the model !")
-            names = study
-
-        # The default case where the variable "study" = [] => we take every variable of the model as things we study
-        elif study == []:
-            names = self.covariance.index
-
-        # Same for the fixed variable
-        if fixed not in self.covariance.index:
-            raise NameError(f"The input fixed variable '{fixed}' is not in the model !")
-
-        # Then we recover the values that we want to plot
-
-        # First, the data before to fixe :
-
-        # Then we begin to buil the plot
-        # The color of the box
-        color_original = "blue"
-        color_fixed = "red"
-
-        # The value of the original distribution
-        SD_original = self.__Standard_deviations
+        return dataframe_reaction
 
     #############################################################################
     ###################   Function add sampling data    #########################
-    def add_sampling_data(
-        self, name, type_variable: str, mean=True, SD=1, distribution="uniform"
-    ):
+    def add_sampling_data(self, name, type_variable: str, mean=True, SD=1, distribution="uniform"):
         ### Description of the fonction
         """
         Fonction add a new data to the data_sampling dataframe
@@ -1952,9 +1997,7 @@ class MODEL:
                 flux, differential = name
                 # We check if the flux is in the model
                 if flux not in self.elasticity.p.df.index:
-                    raise NameError(
-                        f'The flux name "{flux}" is not in the elasticity matrix'
-                    )
+                    raise NameError(f'The flux name "{flux}" is not in the elasticity matrix')
 
                 elif differential not in self.elasticity.p.df.columns:
                     raise NameError(
@@ -1983,9 +2026,7 @@ class MODEL:
                 flux, differential = name
                 # We check if the flux is in the model
                 if flux not in self.elasticity.s.df.index:
-                    raise NameError(
-                        f'The flux name "{flux}" is not in the elasticity matrix'
-                    )
+                    raise NameError(f'The flux name "{flux}" is not in the elasticity matrix')
 
                 elif differential not in self.elasticity.s.columns:
                     raise NameError(
@@ -1998,9 +2039,7 @@ class MODEL:
         # Case where a parameter is sampled
         elif type_variable == "parameter":
             if name not in self.parameters.df.index:
-                raise NameError(
-                    f'The parameter name "{name}" is not in the parameters dataframe'
-                )
+                raise NameError(f'The parameter name "{name}" is not in the parameters dataframe')
 
             if type(mean) == bool:
                 mean = self.parameters.at[name, "Mean values"]
@@ -2008,9 +2047,7 @@ class MODEL:
         # Case where the metabolite concentration is sampled
         elif type_variable == "metabolite" or type_variable == "concentration":
             if name not in self.metabolites.df.index:
-                raise NameError(
-                    f'The metabolite name "{name}" is not in the metabolites dataframe'
-                )
+                raise NameError(f'The metabolite name "{name}" is not in the metabolites dataframe')
 
             if type(mean) == bool:
                 mean = self.metabolites.at[name, "Concentration (mmol/gDW)"]
@@ -2018,9 +2055,7 @@ class MODEL:
         # Case where the flux is sampled
         elif type_variable == "flux" or type_variable == "reaction":
             if name not in self.reactions.df.index:
-                raise NameError(
-                    f'The flux name "{name}" is not in the reactions dataframe'
-                )
+                raise NameError(f'The flux name "{name}" is not in the reactions dataframe')
 
             if type(mean) == bool:
                 mean = self.reactions.at[name, "Flux (mmol/gDW/h)"]
@@ -2028,9 +2063,7 @@ class MODEL:
         # Case where a enzyme concentration/activity is sampled
         elif type_variable == "enzyme":
             if name not in self.enzymes.df.index:
-                raise NameError(
-                    f'The enzyme name "{name}" is not in the enzymes dataframe'
-                )
+                raise NameError(f'The enzyme name "{name}" is not in the enzymes dataframe')
             if type(mean) == bool:
                 mean = self.reactions.at[name, "Concentration / Activity"]
 
@@ -2081,9 +2114,7 @@ class MODEL:
                 return np.random.lognormal(mean, SD)
 
             elif type_samp.lower() == "beta":
-                alpha = (((1 - mean) / ((np.sqrt(SD)) * (2 - mean) ** 2)) - 1) / (
-                    2 - mean
-                )
+                alpha = (((1 - mean) / ((np.sqrt(SD)) * (2 - mean) ** 2)) - 1) / (2 - mean)
                 beta = alpha * (1 - mean)
                 return np.random.beta(alpha, beta)
 
@@ -2115,9 +2146,7 @@ class MODEL:
         for i in range(N):
             # Seed of the generation of random value
             np.random.seed(seed[i])
-            seed_2 = np.random.randint(
-                low=0, high=2**32, size=self.data_sampling.shape[0]
-            )
+            seed_2 = np.random.randint(low=0, high=2**32, size=self.data_sampling.shape[0])
 
             for i, index in enumerate(self.data_sampling.index):
                 # Change of the seed of the radom value generator
@@ -2140,39 +2169,37 @@ class MODEL:
                     )
 
                 elif self.data_sampling.at[index, "Type"].lower() == "parameter":
-                    self.parameters.df.at[
-                        self.data_sampling.at[index, "Name"], "Mean values"
-                    ] = value_rand(
+                    self.parameters.df.at[self.data_sampling.at[index, "Name"], "Mean values"] = value_rand(
                         self.data_sampling.at[index, "Distribution"],
                         self.data_sampling.at[index, "Standard deviation"],
                         self.data_sampling.at[index, "Mean"],
                     )
 
                 elif self.data_sampling.at[index, "Type"].lower() == "metabolite":
-                    self.metabolites.df.at[
-                        self.data_sampling.at[index, "Name"], "Concentration (mmol/gDW)"
-                    ] = value_rand(
-                        self.data_sampling.at[index, "Distribution"],
-                        self.data_sampling.at[index, "Standard deviation"],
-                        self.data_sampling.at[index, "Mean"],
+                    self.metabolites.df.at[self.data_sampling.at[index, "Name"], "Concentration (mmol/gDW)"] = (
+                        value_rand(
+                            self.data_sampling.at[index, "Distribution"],
+                            self.data_sampling.at[index, "Standard deviation"],
+                            self.data_sampling.at[index, "Mean"],
+                        )
                     )
 
                 elif self.data_sampling.at[index, "Type"].lower() == "flux":
-                    self.metabolites.df.at[
-                        self.data_sampling.at[index, "Name"], "Flux (mmol/gDW/h)"
-                    ] = value_rand(
-                        self.data_sampling.at[index, "Distribution"],
-                        self.data_sampling.at[index, "Standard deviation"],
-                        self.data_sampling.at[index, "Mean"],
+                    self.metabolites.df.at[self.data_sampling.at[index, "Name"], "Flux (mmol/gDW/h)"] = (
+                        value_rand(
+                            self.data_sampling.at[index, "Distribution"],
+                            self.data_sampling.at[index, "Standard deviation"],
+                            self.data_sampling.at[index, "Mean"],
+                        )
                     )
 
                 elif self.data_sampling.at[index, "Type"].lower() == "enzyme":
-                    self.metabolites.df.at[
-                        self.data_sampling.at[index, "Name"], "Concentration / Activity"
-                    ] = value_rand(
-                        self.data_sampling.at[index, "Distribution"],
-                        self.data_sampling.at[index, "Standard deviation"],
-                        self.data_sampling.at[index, "Mean"],
+                    self.metabolites.df.at[self.data_sampling.at[index, "Name"], "Concentration / Activity"] = (
+                        value_rand(
+                            self.data_sampling.at[index, "Distribution"],
+                            self.data_sampling.at[index, "Standard deviation"],
+                            self.data_sampling.at[index, "Mean"],
+                        )
                     )
 
             if result == "MI":
@@ -2185,9 +2212,7 @@ class MODEL:
         self.__upload_state()
 
         running_time = time.time() - start
-        print(
-            f"running time of the code : {running_time} \nSo {running_time/N} per occurences !"
-        )
+        print(f"running time of the code : {running_time} \nSo {running_time/N} per occurences !")
         return matrix_sampled
 
     #############################################################################
@@ -2202,12 +2227,8 @@ class MODEL:
         self.__original_atributes["metabolites"] = copy.deepcopy(self.metabolites.df)
         self.__original_atributes["reactions"] = copy.deepcopy(self.reactions.df)
         self.__original_atributes["parameters"] = copy.deepcopy(self.parameters.df)
-        self.__original_atributes["elasticities_s"] = copy.deepcopy(
-            self.elasticity.s._df
-        )
-        self.__original_atributes["elasticities_p"] = copy.deepcopy(
-            self.elasticity.p.__df
-        )
+        self.__original_atributes["elasticities_s"] = copy.deepcopy(self.elasticity.s._df)
+        self.__original_atributes["elasticities_p"] = copy.deepcopy(self.elasticity.p.__df)
         self.__original_atributes["enzymes"] = copy.deepcopy(self.enzymes.df)
 
     #############################################################################

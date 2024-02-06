@@ -83,6 +83,10 @@ class Regulation_class:
             raise NameError(
                 f'The metabolite "{regulator}" is not in the metabolite dataframe !'
             )
+        elif regulator not in self.__class_MODEL_instance.N_without_ext.index:
+            raise NameError(
+                f'The metabolite "{regulator}" is in the metabolite dataframe but is external !'
+            )
 
         # Else it's allright :D
         self.df.loc[name] = [regulated, regulator, coefficient, type_regulation]
@@ -107,6 +111,8 @@ class Regulation_class:
             self.__class_MODEL_instance.elasticity.s.df.at[
                 "creation_" + name, regulator
             ] += coefficient
+
+        self.__class_MODEL_instance._update_elasticity()
 
     #################################################################################
     #########           Fonction to change a regulation coefficient        ##########
