@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 import sympy
 from scipy.linalg import expm
+import random
 
 # Graphic interface
 import tkinter as tk
@@ -26,6 +27,8 @@ from matplotlib.widgets import Slider, CheckButtons
 
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.pyplot import xticks
+from matplotlib.patches import Patch
 
 # Importation of the module of the sub-Class
 from layer_1.reactions import Reaction_class
@@ -272,6 +275,7 @@ class MODEL:
     # Inverse of the Jacobian
     @property  # Core
     def __Jacobian_reversed(self):
+        
         if self.__cache_Reversed_Jacobian is None:
             # Reset of the cache value of the MCA coeff
             self.__cache_R_s_p = None
@@ -364,8 +368,7 @@ class MODEL:
         return pd.DataFrame(
             self.__R_s_c,
             index=index_meta,
-            columns=self.metabolites.df.index,
-        )
+            columns=self.metabolites.df.index)
 
     # R_v_c
     @property  # Core
@@ -437,6 +440,7 @@ class MODEL:
 
     @property  # Displayed
     def covariance(self):
+
         # Return the dataframe of the covariance matrix by a call of it
         return pd.DataFrame(
             self.__covariance,
@@ -516,12 +520,20 @@ class MODEL:
     @property  # Core
     def __corelation(self):
         if self.__cache_rho is None:
-            rho = np.zeros(shape=self.covariance.shape)
-            for i in range(rho.shape[0]):
-                for j in range(rho.shape[1]):
-                    rho[i][j] = self.__covariance[i][j] / (
-                        (self.__covariance[i][i] * self.__covariance[j][j]) ** 0.5
-                    )
+            if self.__frequency_omega == 0.0 :
+                rho = np.zeros(shape=self.covariance.shape)
+                for i in range(rho.shape[0]):
+                    for j in range(rho.shape[1]):
+                        rho[i][j] = self.__covariance[i][j] / (
+                            (self.__covariance[i][i] * self.__covariance[j][j]) ** 0.5
+                        )
+            else : 
+                rho = np.zeros(shape=self.covariance.shape)
+                for i in range(rho.shape[0]):
+                    for j in range(rho.shape[1]):
+                        rho[i][j] = np.real(self.__covariance[i][j]) / (
+                            (np.real(self.__covariance[i][i]) * np.real(self.__covariance[j][j])) ** 0.5
+                        )
             self.__cache_rho = rho
 
         return self.__cache_rho
@@ -704,6 +716,7 @@ class MODEL:
         Function to update the elasticities matrices of the model after a direct modification of the stoichiometric matrix
         or reaction and metabolite dataframes
         """
+        
 
         ###
         # First we check the metabolite
@@ -736,7 +749,9 @@ class MODEL:
         ##################################
         # Then we deal with the parameters
 
+
         missing_para = []
+
         # For every parameters
         for para in self.parameters.df.index:
             # If it is not in the E_p matrix
@@ -744,7 +759,7 @@ class MODEL:
                 missing_para.append(para)
         # We add it
         self.elasticity.p.add_columns(missing_para)
-
+   
         para_to_remove_from_E_p = []
         # For every parameters in the E_p elasticity matrix
         for para in self.elasticity.p.df.columns:
@@ -1125,8 +1140,12 @@ class MODEL:
         if new_mean_fixed == []:
             new_mean_fixed = old_mean_fixed
 
-        elif not isinstance(new_mean_fixed, list):
-            raise TypeError(f"The input argument 'new_mean_vector' must be a list of number !")
+        if not isinstance(new_mean_fixed, list):
+            print(type(new_mean_fixed))
+            if isinstance(new_mean_fixed, np.ndarray):
+                new_mean_fixed.tolist()
+            else : 
+                raise TypeError(f"The input argument 'new_mean_vector' must be a list of number !")
 
         elif len(new_mean_fixed) != len(elements_to_fixe):
             raise ValueError(
@@ -1203,104 +1222,7 @@ class MODEL:
                 mean_df.at[element, "Delta mean"] = delta_mean_study_df.at[element, "Delta"]
 
             if plot == True:
-                # Importation of the necessary module
-                import matplotlib.pyplot as plt
-                from matplotlib.pyplot import xticks
-                from matplotlib.patches import Patch
-
-                # Attribtution of the color of the boxplot
-                color_old = "blue"
-                color_new = "red"
-
-                # initialisation of the lists that will contain all the data for the plot
-                data_plot = []
-                positions_box = []
-                positions_label = []
-                labels = []
-                colors = []
-
-                # For every elements
-                for i, element in enumerate(SD_df.index):
-                    # The old boxplot
-                    data_plot.append(
-                        [
-                            mean_df.at[element, "Old mean"] + SD_df.at[element, "Old SD"],
-                            mean_df.at[element, "Old mean"] - SD_df.at[element, "Old SD"],
-                        ]
-                    )
-                    positions_box.append(2 * i - 0.3)
-                    positions_label.append(2 * i)
-                    labels.append(element)
-                    colors.append(color_old)
-
-                    # The new boxplot
-                    data_plot.append(
-                        [
-                            mean_df.at[element, "New mean"] + SD_df.at[element, "New SD"],
-                            mean_df.at[element, "New mean"] - SD_df.at[element, "New SD"],
-                        ]
-                    )
-                    positions_box.append(2 * i + 0.3)
-                    positions_label.append(2 * i)
-                    labels.append(" ")
-                    colors.append(color_new)
-
-                # We plot !!!
-                fig, ax = plt.subplots()
-                bp = plt.boxplot(
-                    data_plot,
-                    positions=positions_box,
-                    labels=labels,
-                    patch_artist=True,
-                    showfliers=False,
-                    showcaps=False,
-                    whis=0,
-                )
-
-                # Set labels location
-                xticks(positions_label)
-
-                # Ereasing of the median
-                for median in bp["medians"]:
-                    median.set_visible(False)
-
-                # Set of the color of the plotbox
-                for box, color in zip(bp["boxes"], colors):
-                    box.set_facecolor(color)
-
-                # Add of the title
-                plt.title("Title test")
-                plt.ylabel("Values")
-
-                # Legend
-                legend_elements = [
-                    Patch(facecolor="blue", edgecolor="blue", label="Old"),
-                    Patch(facecolor="red", edgecolor="red", label="New"),
-                ]
-                plt.legend(handles=legend_elements, loc="upper right")
-
-                # Rotation of the labels
-                plt.setp(
-                    ax.get_xticklabels(),
-                    rotation=45,
-                    ha="right",
-                    rotation_mode="anchor",
-                )
-
-                # Add of black line between parameter, metabolite and flux
-                pos_line = -1
-                for element in SD_df.index:
-                    if self.find(element) == "parameter":
-                        pos_line += 2
-                plt.axvline(x=pos_line, color="black", linestyle="--", linewidth=1)
-
-                for element in SD_df.index:
-                    if self.find(element) == "metabolite":
-                        pos_line += 2
-                plt.axvline(x=pos_line, color="black", linestyle="--", linewidth=1)
-
-                # Display of the boxplot
-                plt.show()
+                self.boxplot(elements_to_fixe, elements_to_study, new_mean_fixed)
 
             if return_all == True:
                 return SD_df, mean_df
@@ -1554,8 +1476,6 @@ class MODEL:
         data_frame = data_frame.loc[index_to_keep_bis, index_to_keep_bis]
         matrix = data_frame.to_numpy(dtype="float64")
 
-        data_frame
-
         fig, ax = plt.subplots()
 
         if result == "mi":
@@ -1622,40 +1542,280 @@ class MODEL:
         plt.colorbar()
         plt.show()
 
+        return(fig, ax, im)
+
     #############################################################################
-    ###################   Function plot the boxplot   #########################
-    def boxplot(self, fixed: str, study=[]):
+    ###################   Function plot the boxplot   ###########################
+    def boxplot(self,         
+                elements_to_fixe: list,
+                elements_to_study=[],
+                new_mean_fixed=[],
+                title = "Study of fixed variable",
+                color_old = "blue",
+                color_new = "red"):
         """
         Fonction to plot a boxplot
 
         """
-        # Fisrt, we check if the studied variables are all in the model
+        # First, we check if the studied variables are all in the model
         # The case where the user enter something
-        if study != []:
-            for name in study:
+        if elements_to_study != []:
+            for name in elements_to_study:
                 if name not in self.covariance.index:
                     raise NameError(f"The name variable {name} is not in the model !")
-            names = study
 
-        # The default case where the variable "study" = [] => we take every variable of the model as things we study
-        elif study == []:
-            names = self.covariance.index
 
         # Same for the fixed variable
-        if fixed not in self.covariance.index:
-            raise NameError(f"The input fixed variable '{fixed}' is not in the model !")
+        for fixed_element in elements_to_fixe :
+            if fixed_element not in self.covariance.index:
+                raise NameError(f"The input fixed variable '{fixed_element}' is not in the model !")
+        
 
-        # Then we recover the values that we want to plot
+        # Then we recover the values that we want to plot by the call of the group_entropy_fixed_vector function
+        SD_df, mean_df = self.group_entropy_fixed_vector(elements_to_fixe=elements_to_fixe, elements_to_study=elements_to_study, new_mean_fixed=new_mean_fixed, return_all=True)
 
-        # First, the data before to fixe :
+        # initialisation of the lists that will contain all the data for the plot
+        data_plot = []
+        positions_box = []
+        positions_label = []
+        labels = []
+        colors = []
 
-        # Then we begin to buil the plot
-        # The color of the box
-        color_original = "blue"
-        color_fixed = "red"
+        # For every elements
+        for i, element in enumerate(SD_df.index):
+            # The old boxplot
+            data_plot.append(
+                [
+                    mean_df.at[element, "Old mean"] + SD_df.at[element, "Old SD"],
+                    mean_df.at[element, "Old mean"] - SD_df.at[element, "Old SD"],
+                ]
+            )
+            positions_box.append(2 * i - 0.3)
+            positions_label.append(2 * i)
+            labels.append(element)
+            colors.append(color_old)
 
-        # The value of the original distribution
-        SD_original = self.__Standard_deviations
+            # The new boxplot
+            data_plot.append(
+                [
+                    mean_df.at[element, "New mean"] + SD_df.at[element, "New SD"],
+                    mean_df.at[element, "New mean"] - SD_df.at[element, "New SD"],
+                ]
+            )
+            positions_box.append(2 * i + 0.3)
+            positions_label.append(2 * i)
+            labels.append(" ")
+            colors.append(color_new)
+
+        # We plot !!!
+        fig, ax = plt.subplots()
+        bp = plt.boxplot(
+            data_plot,
+            positions=positions_box,
+            labels=labels,
+            patch_artist=True,
+            showfliers=False,
+            showcaps=False,
+            whis=0,
+        )
+
+        # Set labels location
+        xticks(positions_label)
+
+        # Ereasing of the median
+        for median in bp["medians"]:
+            median.set_visible(False)
+
+        # Set of the color of the plotbox
+        for box, color in zip(bp["boxes"], colors):
+            box.set_facecolor(color)
+
+        # Add of the title
+        plt.title(title)
+        plt.ylabel("Values")
+
+        # Legend
+        legend_elements = [
+            Patch(facecolor=color_old, edgecolor=color_old, label="Old"),
+            Patch(facecolor=color_new, edgecolor=color_new, label="New"),
+        ]
+        plt.legend(handles=legend_elements, loc="upper right")
+
+        # Rotation of the labels
+        plt.setp(
+            ax.get_xticklabels(),
+            rotation=45,
+            ha="right",
+            rotation_mode="anchor",
+        )
+
+        # Add of black line between parameter, metabolite and flux
+        pos_line = -1
+        for element in SD_df.index:
+            if self.find(element) == "parameter":
+                pos_line += 2
+        plt.axvline(x=pos_line, color="black", linestyle="--", linewidth=1)
+
+        for element in SD_df.index:
+            if self.find(element) == "metabolite":
+                pos_line += 2
+        plt.axvline(x=pos_line, color="black", linestyle="--", linewidth=1)
+
+        # Display of the boxplot
+        plt.show()
+
+
+    #############################################################################
+    #############   Function display a graphic interface   ######################
+    def graphic_interface(self, result="MI", title="", label=False, value_in_cell=False, index_to_keep=[]) :
+        
+        # Get the dataframe of the result
+        result = result.lower()
+
+        if result == "mi" or result == "mutual information":
+            data_frame = self.group_MI()
+        elif result == "rho" or result == "correlation":
+            data_frame = self.rho()
+        elif result == "cov" or result == "covariance":
+            data_frame = self.covariance
+        
+        # Look the index to keep for the plot of the matrix
+        index_to_keep_bis = []
+        # If nothing is specified, we keep everything
+        # else
+        if index_to_keep != []:
+            # We take a look at every index that the user enter
+            for index in index_to_keep:
+                # If one of them is not in the model, we told him
+                if index not in data_frame.index:
+                    raise NameError(f"- {index} is not in the correlation matrix")
+                # else, we keep in memory the index that are in the model
+                else:
+                    index_to_keep_bis.append(index)
+
+        else:
+            index_to_keep_bis = data_frame.index
+        
+        # Then we create a new matrix with only the index specified
+        data_frame = data_frame.loc[index_to_keep_bis, index_to_keep_bis]
+        matrix = data_frame.to_numpy(dtype="float64")
+
+        fig, ax = plt.subplots()
+
+        if result == "mi":
+            custom_map = matplotlib.colors.LinearSegmentedColormap.from_list("custom", ["white", "blue"])
+
+            im = plt.imshow(matrix, cmap=custom_map, norm=matplotlib.colors.LogNorm())
+
+        elif result == "rho":
+            custom_map = matplotlib.colors.LinearSegmentedColormap.from_list("custom", ["red", "white", "blue"])
+
+            im = plt.imshow(matrix, cmap=custom_map, vmin=-1, vmax=1)
+
+        elif result == "cov":
+            custom_map = matplotlib.colors.LinearSegmentedColormap.from_list("custom", ["white", "blue"])
+
+            im = plt.imshow(matrix, cmap=custom_map)
+
+        # Display the label next to the axis
+        if label == True:
+            ax.set_xticks(np.arange(len(data_frame.index)), labels=data_frame.index)
+            ax.set_yticks(np.arange(len(data_frame.index)), labels=data_frame.index)
+
+            plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
+
+        # Display the value of each cell
+        if value_in_cell == True:
+            for i in range(matrix.shape[0]):
+                for j in range(matrix.shape[1]):
+                    text = ax.text(
+                        j,
+                        i,
+                        round(matrix[i, j], 2),
+                        ha="center",
+                        va="center",
+                        color="black",
+                    )
+
+        if title == "":
+            if result.lower() == "mi":
+                title = "Mutual information"
+            elif result.lower() == "rho":
+                title = "Correlation"
+
+        # Title of the plot
+        ax.set_title(title)
+        fig.tight_layout()
+
+        # Plot of the black line to separate the parameters from the variables
+        # Width of the line
+        line_width = 1
+        # Number of parameters
+        N_para = self.parameters.df.shape[0]
+        # Position of the line
+        x_p_e = [-0.5, N_para - 0.5]
+        y_p_e = [N_para - 0.5, N_para - 0.5]
+        plt.plot(x_p_e, y_p_e, "black", linewidth=line_width)
+        plt.plot(y_p_e, x_p_e, "black", linewidth=line_width)
+
+        x_p = [-0.5, N_para - 0.5]
+        y_p = [N_para - 0.5, N_para - 0.5]
+        plt.plot(x_p, y_p, "black", linewidth=line_width)
+        plt.plot(y_p, x_p, "black", linewidth=line_width)
+
+        plt.colorbar()
+
+        # Positionning the cursors
+        slider_frequency_ax = plt.axes([0.15, 0.10, 0.7, 0.03], facecolor='lightgray')
+        slider_temperature_ax = plt.axes([0.15, 0.05, 0.7, 0.03], facecolor='lightgray')
+        slider_elasticity_ax = plt.axes([0.15, 0.00, 0.7, 0.03], facecolor='lightgray')
+
+        # Option of the cursors
+        slider_frequency = Slider(slider_frequency_ax, 'Frequency', 0, 10, valinit=0.0)
+        slider_temperature = Slider(slider_temperature_ax, 'Temperature (K)', 0, 500, valinit=20+273.15)
+        slider_elasticity = Slider(slider_elasticity_ax, 'Elasticity', -1, 1, valinit=0.5)
+
+
+        # Adjusting the void between the figure and the border of the wondows
+        plt.subplots_adjust(left=0.1, right=1.0, bottom=0.25, top=0.9)
+        
+        # Ajusting the size of the windows
+        figManager = plt.get_current_fig_manager()
+        figManager.window.set_default_size(850, 1000)  # Modifiez ces valeurs selon vos besoins
+
+        list_flux = self.elasticity.p.df.index
+        list_para = self.elasticity.p.df.columns
+
+        flux = random.choice(list_flux)
+        para = random.choice(list_para)
+
+        print(f"\nThe elasticity that represent the influence of {para} on {flux} flux ! \n")
+
+        # Update function of the heatmap with the new parameters after moving the cursor
+        def update(val):
+            self._reset_value(session="e_p")
+            self.__frequency_omega = slider_frequency.val
+            self.parameters.df.at["Temperature", "Mean values"] = slider_temperature.val
+            self.elasticity.p.df.at[flux, para] = slider_elasticity.val
+
+            im.set_data(self.__corelation)
+
+            if value_in_cell == True :
+                # Put to null string "" the text in the center of each square
+                for text in ax.texts:
+                    text.set_text("")
+
+                # Update of the text display in the center of each square
+                for i in range(self.__corelation.shape[0]):
+                    for j in range(self.__corelation.shape[1]):
+                        text = ax.text(j, i, f'{self.__corelation[i, j]:.1f}', ha='center', va='center')
+
+            fig.canvas.draw_idle()
+
+        slider_frequency.on_changed(update)
+        slider_temperature.on_changed(update)
+        slider_elasticity.on_changed(update)
+        plt.show()
 
     ################################################################################
     #                                                                              #

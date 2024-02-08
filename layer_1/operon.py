@@ -14,7 +14,7 @@ class Operon_class:
         # Private attribute for the instance of the Main class
         self.__class_MODEL_instance = class_MODEL_instance
 
-        self.df = pd.DataFrame(columns=["Enzymes linked"])
+        self.df = pd.DataFrame(columns=["Enzymes linked", "Mixed covariance"])
 
     #################################################################################
     ###########           Return the Dataframe of the operons           #############
@@ -29,7 +29,7 @@ class Operon_class:
 
     #################################################################################
     #########                  Fonction to add an operon                   ##########
-    def add(self, name="", enzymes_linked=[]) -> None:
+    def add(self, name="", enzymes_linked=[], mixed_covariance = 0.0) -> None:
         ### Description of the fonction
         """
         Fonction to add an operon to the model
@@ -59,7 +59,7 @@ class Operon_class:
                     )
 
         # If everything is ok, we add the operon and its linked enzyme
-        self.df.loc[name] = [enzymes_linked]
+        self.df.loc[name] = [enzymes_linked, mixed_covariance]
 
     #################################################################################
     #########      Fonction to link enzyme to existing opero               ##########

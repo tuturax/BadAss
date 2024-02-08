@@ -128,6 +128,8 @@ class Parameter_class:
         """
         Fonction to consider all external metabolite as parameters
         """
+
+
         # For every metabolite of the model
         missing_meta_ext = []
         for meta in self.__class_MODEL_instance.metabolites.df.index:
@@ -138,7 +140,7 @@ class Parameter_class:
                     # We add it to the parameter dataframe
                     self.add(meta + "_para")
 
-                # Same for the parameters elsaticity matrix
+                # Same for the parameters in the elasticity matrix
                 if (
                     meta + "_para"
                 ) not in self.__class_MODEL_instance.elasticity.p.df.columns:
@@ -149,9 +151,12 @@ class Parameter_class:
         if missing_meta_ext != []:
             # By creating a temporary dataframe with the external metabolite as columns
             df_temporary = -0.5 * self.__class_MODEL_instance.N.loc[missing_meta_ext]
-            df_temporary.rename(index=lambda x: x + "_para")
-            df_temporary = df_temporary.T
 
+            for index in df_temporary.index :
+                df_temporary = df_temporary.rename(index={index: index+"_para"})
+
+            df_temporary = df_temporary.T
+        
             self.__class_MODEL_instance.elasticity.p.df = pd.concat(
                 [self.__class_MODEL_instance.elasticity.p.df, df_temporary], axis=1
             )
