@@ -15,7 +15,7 @@ class Reaction_class:
         self.__class_MODEL_instance = class_MODEL_instance
 
         self.df = pd.DataFrame(
-            columns=["Metabolites", "Equilibrium constant", "Law", "Flux (mmol/gDW/h)"]
+            columns=["Metabolites", "Equilibrium constant", "Reversible", "Flux (mmol/gDW/h)"]
         )
 
     ################################################################################
@@ -31,17 +31,26 @@ class Reaction_class:
 
     #################################################################################
     #########           Fonction to add a reaction                         ##########
-    def add(self, name: str, metabolites={}, k_eq=1.0, law="", flux=1.0) -> None:
+    def add(self, name: str, metabolites={}, k_eq=1.0, reversible=True, flux=1.0) -> None:
         ### Description of the fonction
         """
         Fonction to add a reaction to the model
 
-        name        : Name of the reaction.
-        metabolites : Dictionnary that take as keys the names of the metabolites (str) and as value the stoichiometric coefficient (float)
+        Parameters
+        ----------
+        name        : str
+            Name of the reaction\n
+        
+        metabolites : dict
+            Take as keys the names of the metabolites (str) and as value the stoichiometric coefficient (float)\n
 
-        k_eq        : Equilibre constant of the reaction
-        law         : Reaction law
-        flux        : Flux of the reaction at the reference state
+        k_eq        : float
+            Equilibre constant of the reaction\n
+        reversible  : bool
+            Is the reaction reversible ?\n
+
+        flux        : float
+            Flux of the reaction at the reference state
 
         """
         # Look if the reaction class was well intialised
@@ -50,7 +59,7 @@ class Reaction_class:
                 columns=[
                     "Metabolites",
                     "Equilibrium constant",
-                    "Law",
+                    "Reversible",
                     "Flux (mmol/gDW/h)",
                 ]
             )
@@ -62,7 +71,7 @@ class Reaction_class:
         # Else, the reaction is add to the model by an add to the DataFrame
         else:
             # Add the reaction to the reactions dataframe
-            self.df.loc[name] = [metabolites, k_eq, law, flux]
+            self.df.loc[name] = [metabolites, k_eq, reversible, flux]
 
             # Add a null columns to the stoichio matrix N
             if name not in self.__class_MODEL_instance.Stoichio_matrix.columns:
@@ -85,16 +94,26 @@ class Reaction_class:
     #################################################################################
     #########           Fonction to change a reaction                      ##########
 
-    def change(self, name: str, metabolites=None, k_eq=None, law="", flux=None):
+    def change(self, name: str, metabolites=None, k_eq=None, reversible=True, flux=None):
         ### Description of the fonction
         """
         Fonction to change a reaction properties in the model
+        
+        Parameters
+        ----------
+        name           : str
+            Name of the reaction to change\n
+        
+        metabolites    : dict
+            Dictionnary of the metabolites used in this reaction and their stoichiometric coefficient\n
+        k_eq           : float 
+            The equilibrium constant of the reaction\n
+    
+        reversible     : bool
+            Specify if the reaction is reversible or not\n
 
-        name           : Name of the reaction to change
-        metabolites    : Dictionnary of the metabolites used in this reaction
-        k_eq           : Float for the equilibrium constant of the reaction
-        law            : Strig to specify the type of law of th ereactino
-        flux           : Float for th evalue of the lux
+        flux           : float
+            Value of the flux at the reference state
 
         """
 
@@ -106,8 +125,8 @@ class Reaction_class:
                 self.df.at[name, "Metabolites"] = metabolites
             if k_eq != None:
                 self.df.at[name, "Equilibrium constant"] = k_eq
-            if law != None:
-                self.df.at[name, "Law"] = law
+            if reversible != None:
+                self.df.at[name, "Reversible"] = reversible
             if flux != None:
                 self.df.at[name, "Flux (mmol/gDW/h)"] = flux
 
@@ -118,8 +137,11 @@ class Reaction_class:
         ### Description of the fonction
         """
         Fonction to remove a reaction to the model
-
-        name        : Name of the reaction to remove
+        
+        Parameters
+        ----------
+        name        : str
+            Name of the reaction to remove
         """
 
         # Look if the reaction isn't in the model
@@ -143,16 +165,23 @@ class Reaction_class:
 
     #################################################################################
     #########           Fonction to add a reaction                         ##########
-    def _update(self, name: str, metabolites={}, k_eq=1.0, law="", flux=1) -> None:
+    def _update(self, name: str, metabolites={}, k_eq=1.0, reversible="", flux=1) -> None:
         ### Description of the fonction
         """
         Internal function to update the reaction dataframe after a change of the stoichiometric matrix
+        
+        Parameters
+        ----------
+        name        : str
+            Name of the reaction\n
+        metabolites : dict
+            Dictionnary that take as keys the names of the metabolites (str) and as value the stoichiometric coefficient (float)\n
 
-        name        : Name of the reaction.
-        metabolites : Dictionnary that take as keys the names of the metabolites (str) and as value the stoichiometric coefficient (float)
+        k_eq        : float
+            Equilibre constant of the reaction\n
 
-        k_eq        : Equilibre constant of the reaction
-        law         : Reaction law
+        reversible         : bool
+            is the reaction reversible
 
         """
         # Look if the reaction class was well intialised
@@ -161,14 +190,14 @@ class Reaction_class:
                 columns=[
                     "Metabolites",
                     "Equilibrium constant",
-                    "Law",
+                    "Reversible",
                     "Flux (mmol/gDW/h)",
                 ]
             )
 
         # Look if the reaction is already in the model
         if name not in self.df.index:
-            self.df.loc[name] = [metabolites, k_eq, law, flux]
+            self.df.loc[name] = [metabolites, k_eq, reversible, flux]
 
             # We check the stoichiometric coefficient link to this reaction in order to automatically add them to the matrix
             for meta in list(self.df.loc[name, "Metabolites"].keys()):

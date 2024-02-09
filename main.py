@@ -80,6 +80,9 @@ class MODEL:
 
         # Initialisation of the Matrix_Stoechio attribute
         self._Stoichio_matrix = pd.DataFrame()
+        
+        # bool to specify if the update is ON after a modification of the model
+        self.__activate_update = True
 
         # Sampling file of the model
         self.data_sampling = pd.DataFrame(
@@ -146,6 +149,17 @@ class MODEL:
     @property
     def __N_without_ext(self):
         return self.N_without_ext.to_numpy(dtype="float64")
+
+    @property
+    def activate_update(self):
+        return self.__activate_update
+    
+    @activate_update.setter
+    def activate_update(self, value):
+        if not isinstance(value, bool) :
+            raise TypeError("The attribute of the model 'activate_update' must be a bool\n")
+        else:
+            self.__activate_update = value
 
     @property
     def frequency_omega(self):
@@ -417,10 +431,28 @@ class MODEL:
     def __covariance(self):
         # If the cache is empty, we recompute the cov matrix and atribute the result to the cache value
         if self.__cache_cov is None:
+            # First, we get the response matrix as a local variable to avoid a call of function everytime.
             R = self.__R
 
+            # We creat a identity matrix to represent the covarience matrix of the parameters
             covariance_dp = np.identity(len(self.__Standard_deviations))
 
+            # We create a dataframe that represent this matrix for an easier manipulation for the case of the operons
+            df_cov_dp = pd.DataFrame(covariance_dp, index=self.parameters.df.index, columns=self.parameters.df.index)
+            
+            # Then we set the value of the covariance matrix of the parameters depending to the operons 
+            for operon in self.operons.df.index:
+                # If the operon is activated
+                if self.operons.df.at[operon, "Activated"] == True :
+                    for index in df_cov_dp.index:
+                        for column in df_cov_dp.columns:
+                            # We look for the intersection of every enzyme of the operon and add the value of the mixed covariance
+                            if index in self.operons.df.at[operon, "Enzymes linked"] and column in self.operons.df.at[operon, "Enzymes linked"]:
+                                df_cov_dp.at[index, column] = self.operons.df.at[operon, "Mixed covariance"]
+                
+            
+            covariance_dp = df_cov_dp.to_numpy()
+            # Then we attribute the real value of the variance of the parameters stored in the parameters dataframe
             for i, parameter in enumerate(self.parameters.df.index):
                 covariance_dp[i][i] = self.parameters.df.at[parameter, "Standard deviation"] ** 2
 
@@ -679,37 +711,37 @@ class MODEL:
         """
         Fonction to update the dataframes after atribuated a new values to the stoichio matrix
         """
+        if self.activate_update :
+            # Deal with the reactions
+            # Loop on every reaction of the stoichiometry matrix
+            for reaction in self.Stoichio_matrix.columns:
+                # Creation of a dictionnary that will contain every metabolite (as keys) and their stoichiometries coeff (as values)
+                dict_stochio = {}
 
-        # Deal with the reactions
-        # Loop on every reaction of the stoichiometry matrix
-        for reaction in self.Stoichio_matrix.columns:
-            # Creation of a dictionnary that will contain every metabolite (as keys) and their stoichiometries coeff (as values)
-            dict_stochio = {}
+                # We also add the stochiometric coefficent to the dataframe of reaction
+                for meta in self.Stoichio_matrix.index:
+                    if self.Stoichio_matrix.at[meta, reaction] != 0:
+                        dict_stochio[meta] = self.Stoichio_matrix.loc[meta, reaction]
 
-            # We also add the stochiometric coefficent to the dataframe of reaction
+                # Then we add the reaction to the reactions Dataframe
+                self.reactions._update(name=reaction, metabolites=dict_stochio)
+
+            # Deal with the metabolites
+
             for meta in self.Stoichio_matrix.index:
-                if self.Stoichio_matrix.at[meta, reaction] != 0:
-                    dict_stochio[meta] = self.Stoichio_matrix.loc[meta, reaction]
+                self.metabolites._update(meta)
 
-            # Then we add the reaction to the reactions Dataframe
-            self.reactions._update(name=reaction, metabolites=dict_stochio)
+            # Reset the value of the cache data
+            self.__cache_Link_matrix = None
+            self.__cache_Reduced_Stoichio_matrix = None
+            self.__cache_Jacobian = None
 
-        # Deal with the metabolites
-
-        for meta in self.Stoichio_matrix.index:
-            self.metabolites._update(meta)
-
-        # Reset the value of the cache data
-        self.__cache_Link_matrix = None
-        self.__cache_Reduced_Stoichio_matrix = None
-        self.__cache_Jacobian = None
-
-        # We update the elasticities matrix based on the new stoichiometric matrix
-        self._update_elasticity()
+            # We update the elasticities matrix based on the new stoichiometric matrix
+            self._update_elasticity()
 
     #################################################################################
     ############     Function to the elaticities matrix of the model     ############
-
+        
     def _update_elasticity(self, session="E_s"):
         ### Description of the fonction
         """
@@ -717,65 +749,65 @@ class MODEL:
         or reaction and metabolite dataframes
         """
         
+        if self.activate_update :
+            ###
+            # First we check the metabolite
+            # For every metabolite in the stoichio matrix (without the external one, they are in the parameter section) :
+            for meta in self.N_without_ext.index:
+                # If the metabolilte isn't in the E_s elasticity matrix => we add it to the E_s elasticity matrix
+                if meta not in self.elasticity.s.df.columns:
+                    self.elasticity.s.df[meta] = 0
 
-        ###
-        # First we check the metabolite
-        # For every metabolite in the stoichio matrix (without the external one, they are in the parameter section) :
-        for meta in self.N_without_ext.index:
-            # If the metabolilte isn't in the E_s elasticity matrix => we add it to the E_s elasticity matrix
-            if meta not in self.elasticity.s.df.columns:
-                self.elasticity.s.df[meta] = 0
+            # For every metabolite of the E_s elasticity matrix :
+            for meta in self.elasticity.s.df.columns:
+                # If the metabolite isn't in the stoichio matrix => we remove it from the E_s elasticity matrix
+                if meta not in self.N_without_ext.index:
+                    self.elasticity.s.df.drop(columns=meta, inplace=True)
 
-        # For every metabolite of the E_s elasticity matrix :
-        for meta in self.elasticity.s.df.columns:
-            # If the metabolite isn't in the stoichio matrix => we remove it from the E_s elasticity matrix
-            if meta not in self.N_without_ext.index:
-                self.elasticity.s.df.drop(columns=meta, inplace=True)
+            # Special case when there is no reaction
+            # Pandas doesn't allow to add line before at least 1 column is add
+            if self.elasticity.s.df.columns.size != 0:
+                for reaction in self.reactions.df.index:
+                    if reaction not in self.elasticity.s.df.index:
+                        self.elasticity.s.df.loc[reaction] = [0 for i in self.elasticity.s.df.columns]
 
-        # Special case when there is no reaction
-        # Pandas doesn't allow to add line before at least 1 column is add
-        if self.elasticity.s.df.columns.size != 0:
-            for reaction in self.reactions.df.index:
-                if reaction not in self.elasticity.s.df.index:
-                    self.elasticity.s.df.loc[reaction] = [0 for i in self.elasticity.s.df.columns]
+            # Reset of the thermodynamic sub-matrix of the E_s elasticity matrix
+            colonnes = self.elasticity.s.df.columns
+            index = self.elasticity.s.df.index
+            self.elasticity.s.thermo = pd.DataFrame(0, columns=colonnes, index=index)
+            self.elasticity.s.enzyme = pd.DataFrame(0, columns=colonnes, index=index)
+            self.elasticity.s.regulation = pd.DataFrame(0, columns=colonnes, index=index)
 
-        # Reset of the thermodynamic sub-matrix of the E_s elasticity matrix
-        colonnes = self.elasticity.s.df.columns
-        index = self.elasticity.s.df.index
-        self.elasticity.s.thermo = pd.DataFrame(0, columns=colonnes, index=index)
-        self.elasticity.s.enzyme = pd.DataFrame(0, columns=colonnes, index=index)
-        self.elasticity.s.regulation = pd.DataFrame(0, columns=colonnes, index=index)
-
-        ##################################
-        # Then we deal with the parameters
+            ##################################
+            # Then we deal with the parameters
 
 
-        missing_para = []
+            missing_para = []
 
-        # For every parameters
-        for para in self.parameters.df.index:
-            # If it is not in the E_p matrix
-            if para not in self.elasticity.p.df.columns:
-                missing_para.append(para)
-        # We add it
-        self.elasticity.p.add_columns(missing_para)
-   
-        para_to_remove_from_E_p = []
-        # For every parameters in the E_p elasticity matrix
-        for para in self.elasticity.p.df.columns:
-            # If the parameters isn't in the parameters dataframe, we remove it from E_p
-            if para not in self.parameters.df.index:
-                para_to_remove_from_E_p.append(para)
-        self.elasticity.p.remove_columns(para_to_remove_from_E_p)
+            # For every parameters
+            for para in self.parameters.df.index:
+                # If it is not in the E_p matrix
+                if para not in self.elasticity.p.df.columns:
+                    missing_para.append(para)
+            # We add it
+            self.elasticity.p.add_columns(missing_para)
+    
+            para_to_remove_from_E_p = []
+            # For every parameters in the E_p elasticity matrix
+            for para in self.elasticity.p.df.columns:
+                # If the parameters isn't in the parameters dataframe, we remove it from E_p
+                if para not in self.parameters.df.index:
+                    para_to_remove_from_E_p.append(para)
+            self.elasticity.p.remove_columns(para_to_remove_from_E_p)
 
-        # Special case when there is no reaction
-        # Pandas doesn't allow to add line before at least 1 column is add
-        if self.elasticity.p.df.columns.size != 0:
-            for reaction in self.reactions.df.index:
-                if reaction not in self.elasticity.p.df.index:
-                    self.elasticity.p.df.loc[reaction] = [0 for i in self.elasticity.p.df.columns]
+            # Special case when there is no reaction
+            # Pandas doesn't allow to add line before at least 1 column is add
+            if self.elasticity.p.df.columns.size != 0:
+                for reaction in self.reactions.df.index:
+                    if reaction not in self.elasticity.p.df.index:
+                        self.elasticity.p.df.loc[reaction] = [0 for i in self.elasticity.p.df.columns]
 
-        self._reset_value()
+            self._reset_value()
 
 
 
@@ -1176,10 +1208,10 @@ class MODEL:
         Cov_ss = Cov_df.loc[elements_to_study, elements_to_study].to_numpy(dtype="float64")
         Cov_ff = Cov_df.loc[elements_to_fixe, elements_to_fixe].to_numpy(dtype="float64")
         Cov_sf = Cov_df.loc[elements_to_study, elements_to_fixe].to_numpy(dtype="float64")
-        Cov_fr = Cov_sf.T
+        Cov_fs = Cov_sf.T
 
         # The targeted covariance matrix of the studied elements in the case where there is a fixed vector
-        Cov_ss_f = Cov_ss - np.dot(Cov_sf, np.dot(np.linalg.inv(Cov_ff), Cov_fr))
+        Cov_ss_f = Cov_ss - np.dot(Cov_sf, np.dot(np.linalg.inv(Cov_ff), Cov_fs))
 
         # New entropy of the studied elements with the fixed vector
         entropy = len(Cov_ss) / 2 * np.log(2 * np.pi * np.e) + np.log(np.linalg.det(Cov_ss_f))
@@ -1817,9 +1849,19 @@ class MODEL:
         slider_elasticity.on_changed(update)
         plt.show()
 
+
+
+
+
+
+
+
+
+
+
     ################################################################################
     #                                                                              #
-    # linear # SBML # XML # Cobra # JSON # CSV # Check # unstable # driving-forces #
+    # linear # SBML # XML # Cobra # JSON # CSV # SBtab # check # driving-forces    #
     #                                                                              #
     ################################################################################
     #                                                                              #
@@ -1833,8 +1875,11 @@ class MODEL:
         ### Description of the fonction
         """
         Fonction to create a linear system of n metabolite
-
-        n         : Number of metabolite in the linear network
+        
+        Parameters
+        ----------
+        n : int
+          Number of metabolite in the linear network
 
         """
         if n <= 1:
@@ -1873,8 +1918,11 @@ class MODEL:
         ### Description of the fonction
         """
         Fonction read an Excel file
-
-        file     : string the specify the directory of the Excel file
+        
+        Parameters
+        ----------
+        file     : str 
+            The directory of the Excel file
 
         """
 
@@ -1909,15 +1957,33 @@ class MODEL:
         ### Description of the fonction
         """
         Fonction read a SBML file
+        
+        Parameters
+        ----------
 
-        directory     : String of the the directory of the SBML directory
-        file_SBML     : String of the .xml file
-        reference_state_metabolites : String for the database of metabolite name
-        reference_state_c           : String for the database of metabolite concentration at reference state
-        reference_state_reactions   : String for the database of reaction name
-        reference_state_v           : String for the database of reaction flux at reference state
-        reference_state_keq         : String for the database of reaction equibrlium constant
-        ignor_error                 : Boolean to specify if you want to continue th reading process, even if there is an error in the SBML file
+        directory     : str 
+            The directory of the SBML directory \n
+
+        file_SBML     : str
+            name of the .xml file \n
+
+        reference_state_metabolites : str 
+            name of the database of metabolite name \n
+
+        reference_state_c           : str 
+            name the database of metabolite concentration at reference state \n
+
+        reference_state_reactions   : str
+            name of the database of reaction name \n
+
+        reference_state_v           : str 
+            name of the database of reaction flux at reference state \n
+
+        reference_state_keq         : str
+            name of the database of reaction equibrlium constant \n
+            
+        ignor_error                 : Bool
+            to specify if you want to continue th reading process, even if there is an error in the SBML file
         """
         import libsbml
 
@@ -2040,6 +2106,88 @@ class MODEL:
                         # Attributon of the keq to the dataframe
                         self.reactions.df.at[list_reactions[i], "Equilibrium constant"] = float(list_keq[i])
 
+
+
+    #############################################################################
+    ###################   Function to read a SBTab file  #########################
+    def read_SBtab(
+        self,
+        filepath = "../Exemples/SBTab/Model.tsv"
+    ):
+        ### Description of the fonction
+        """
+        Fonction read a SBML file
+        
+        Parameters
+        ----------
+
+        directory     : str 
+            directory/file_name.tsv
+        """
+        import sbtab
+        import re
+
+        # Reset of the model
+        self.reset
+
+        # Then we desactivate the automatic update of the model
+        self.activate_update = False
+
+        # Function to extract the number from a string
+        def extract_name_and_number(string, default = 1):
+            # We use a regular expression to find a number followed by a space
+            match = re.search(r'(\d+(?:\.\d+)?)\s', string)
+            if match:
+                # Then we extract the number found
+                number = float(match.group(1))
+                # We delete it from the string
+                string = string.replace(match.group(0), '')
+                return number, string
+            else:
+                # If no number where found, we return a default number
+                return default, string
+
+
+        filename = filepath.split('/')[-1]
+        St = sbtab.SBtab.read_csv(filepath=filepath, document_name=filename)
+
+        reactions, metabolite, position, ref_concentration, ref_rate, Gibbs_free_energy = St.sbtabs
+        reactions = reactions.value_rows
+        ref_rate = ref_rate.value_rows
+
+        
+        # First we add the reactions
+        for i, reaction in enumerate(reactions) :
+            name = reaction[0]
+            # We split the equation str in 2, the first part is the reactants, the second one is the products
+            reactants, products = reaction[1].split(" <=> ")
+
+            dict_react = {}
+
+            reactants = reactants.split(" + ")
+            for reactant in reactants :
+                stoichio, name_meta = extract_name_and_number(reactant, default=-1)
+                dict_react[name_meta] = stoichio
+
+            products = products.split(" + ")
+            for product in products :
+                stoichio, name_meta = extract_name_and_number(product, default=1)
+                dict_react[name_meta] = stoichio
+
+            reversible = bool(reaction[-1])
+            rate = float(ref_rate[i][-1])
+
+            self.reactions.add(name, dict_react, k_eq=1., reversible=reversible, flux=rate)
+        
+        self.activate_update = True
+        self._update_network()
+
+            
+
+
+
+
+
     #############################################################################
     ###################   Function to check the model   #########################
     @property
@@ -2131,11 +2279,23 @@ class MODEL:
         """
         Fonction add a new data to the data_sampling dataframe
 
-        name           : string name of the variable to sample, list of 2 string in the case of elasticity
-        type_variable  : string that make reference to the type of the variable to sample
-        mean           : Mean of the variable, if mean = True, mean take the current value of the variable
-        SD             : float of the standard deviation of the random draw of the variable
-        distribution   : string that make reference to the type of distribution of the random draw of this variable
+        Parameters
+        ----------
+
+        name           : str
+            Name of the variable to sample, list of 2 string in the case of elasticity \n
+
+        type_variable  : str
+            To make reference to the type of the variable to sample \n
+
+        mean           : float or True
+            Mean of the variable, if mean = True, mean take the current value of the variable \n
+
+        SD             : float 
+            The standard deviation of the random draw of the variable \n
+
+        distribution   : str
+            Type of distribution of the random draw of this variable ("uniform", "normal", "lognormal" or "beta")
         """
 
         # Case where the elasticity p is sampled
@@ -2252,9 +2412,17 @@ class MODEL:
         """
         Fonction launch a sampling study, it return the mean value of the matrix
 
-        N              : Number of random draw done for each variable of the .data_sampling dataframe
-        result         : matrix returned by the code
-        seed_constant  : float that is the seed of our radom draw
+        Parameters
+        ----------
+
+        N              : int
+            Number of random draw done for each variable of the .data_sampling dataframe \n
+
+        result         : str
+            matrix returned by the code \n
+
+        seed_constant  : float
+            Seed of our radom draw
         """
 
         # If the number of sample asked if < 1 = bad
