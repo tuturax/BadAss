@@ -34,7 +34,8 @@ class Reaction_class:
     def add(self, name: str, metabolites={}, k_eq=1.0, reversible=True, flux=1.0) -> None:
         ### Description of the fonction
         """
-        Fonction to add a reaction to the model
+        Fonction to add a reaction to the model\n
+            If it is already in the model, it change its properties
 
         Parameters
         ----------
@@ -64,9 +65,6 @@ class Reaction_class:
                 ]
             )
 
-        # Look if the reaction is already in the model
-        if name in self.df.index:
-            raise NameError('The reaction "' + name + '" is already in the model !')
 
         # Else, the reaction is add to the model by an add to the DataFrame
         else:

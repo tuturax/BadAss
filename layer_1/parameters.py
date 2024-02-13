@@ -36,11 +36,21 @@ class Parameter_class:
     def add(self, name: str, mean=1, Standard_deviation=1.0) -> None:
         ### Description of the fonction
         """
-        Fonction to add a parameter to the model
+        Fonction to add a parameter to the model\n
+            If it is already in the model, change the properties
 
-        name                : Name of the parameter
-        mean                : Mean value of the parameter
-        Standard_deviation  : Standard deviation of the parameter
+
+        Parameters
+        ----------
+
+        name                : str
+            Name of the parameter\n
+
+        mean                : float
+            Mean value of the parameter\n
+
+        Standard_deviation  : float
+            Standard deviation of the parameter
 
         """
 
@@ -60,8 +70,12 @@ class Parameter_class:
         ### Description of the fonction
         """
         Fonction to remove a parameter to the model
-
-        name        : Name of the parameter to remove
+        
+        Parameters
+        ----------
+        
+        name        : str
+            Name of the parameter to remove
         """
 
         # Look if the parameter is in the model

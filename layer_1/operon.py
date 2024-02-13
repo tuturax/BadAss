@@ -34,9 +34,17 @@ class Operon_class:
         """
         Fonction to add an operon to the model
 
-        name                : name of the operon to add to the dataframe
-        enzymes_linked      : list of enzymes linked to this operon
-        activated           : Boolean to specify if the operon is activated
+        Parameters
+        ----------
+
+        name                : str
+            Name of the operon to add to the dataframe\n
+
+        enzymes_linked      : list of str
+            list of string name enzymes linked to this operon\n
+        
+        activated           : bool
+            Is the operon activated ?
         """
 
         # Look if the operon is already in the model
@@ -81,10 +89,16 @@ class Operon_class:
     def add_enzymes_to_operon(self, name="", enzymes_to_add=[]) -> None:
         ### Description of the fonction
         """
-        Fonction to add enzymes to an existong operon of the model
+        Fonction to add enzymes to an existing operon of the model
+        
+        Parameters
+        ----------
 
-        name                : name of the operon
-        enzymes_to_add      : list of enzymes to link to this operon
+        name                : str
+            name of the operon\n
+
+        enzymes_to_add      : list of str
+            Enzymes to link to this operon
         """
 
         # Look if the operon is already in the model
@@ -121,8 +135,12 @@ class Operon_class:
         ### Description of the fonction
         """
         Fonction to remove an operon from the dataframe
+        
+        Parameters
+        ----------
 
-        name        : Name of the operon to remove a enzyme
+        name        : str
+            Name of the operon to remove
         """
 
         # Look if the operon is in the model
@@ -142,9 +160,15 @@ class Operon_class:
         ### Description of the fonction
         """
         Fonction to remove enzyme from an operon
+        
+        Parameters
+        ----------
 
-        name        : Name of the operon to remove a enzyme
-        enzymes     : list of enzyme to remove from the operon line
+        name        : str
+            Name of the operon from which the enzyme must be removed\n
+
+        enzymes     : list of str
+            list enzyme to remove from the operon
         """
 
         # Look if the operon is in the model
@@ -171,8 +195,12 @@ class Operon_class:
         ### Description of the fonction
         """
         Fonction to activate an operon
+        
+        Parameters
+        ----------
 
-        name        : Name of the operon to activate
+        name        : str
+            Name of the operon to activate
         """
 
         # Look if the operon is in the model
@@ -186,12 +214,15 @@ class Operon_class:
     #################################################################################
     #########             Fonction to desactivate an operon                ##########
 
-    def activate(self, name: str) -> None:
+    def desactivate(self, name: str) -> None:
         ### Description of the fonction
         """
         Fonction to desactivate an operon
-
-        name        : Name of the operon to desactivate
+        
+        Parameters
+        ----------
+        name        : str
+            Name of the operon to desactivate
         """
 
         # Look if the operon is in the model

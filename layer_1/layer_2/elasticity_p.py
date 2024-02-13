@@ -57,7 +57,7 @@ class Elasticity_p_class:
 
     #################################################################################
     #########        Fonction to change a coefficient of the matrix        ##########
-    def change(self, flux_name: str, parameter_name: str, value: float):
+    def change(self, flux_name: str, parameter_name: str, value: float) :
         if flux_name not in self.df.index:
             raise NameError(f"The flux name '{flux_name}' is not in the model")
         elif parameter_name not in self.df.columns:

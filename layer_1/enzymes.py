@@ -34,10 +34,17 @@ class Enzymes_class:
         """
         Fonction to add an enzyme to the model
 
-        name                : Name of the enzyme
-        mean                : Mean value of the enzyme
-        reaction_linked     : List of string of the reaction linked to this enzyme
+        Parameters
+        ----------
 
+        name                : str
+            Name of the enzyme\n
+
+        mean                : float
+            Mean value of the enzyme\n
+
+        reaction_linked     : list of str
+            list of reaction names linked to this enzyme
         """
 
         # Look if the enzyme is already in the model
@@ -52,7 +59,11 @@ class Enzymes_class:
         """
         Fonction to remove an enzyme to the model
 
-        name        : Name of the enzyme to remove a enzyme
+        Parameters
+        ----------
+
+        name        : str
+            Name of the enzyme to remove
         """
 
         # Look if the enzyme is in the model

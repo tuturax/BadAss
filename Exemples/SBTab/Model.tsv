@@ -374,60 +374,120 @@ rate of reaction	TPI	0.4436534
 					
 !!SBtab TableID='ReactionGibbsFreeEnergy' TableType='Quantity' TableName='Reaction Gibbs free Energy'					
 !QuantityType	!Reaction	!Value			
-Gibbs free energy of reaction	ACALD	-12.507925			
-Gibbs free energy of reaction	ACALDt	-0.081756394			
-Gibbs free energy of reaction	ACKr	-4.2307606			
-Gibbs free energy of reaction	ACONTa	8.470559			
+Gibbs free energy of reaction	ACALD	2.4789569			
+Gibbs free energy of reaction	ACALDt	2.4789569			
+Gibbs free energy of reaction	ACKr	2.4789569			
+Gibbs free energy of reaction	ACONTa	-2.4789569			
 Gibbs free energy of reaction	ACONTb	-11.153397			
-Gibbs free energy of reaction	ACt2r	0.46585969			
+Gibbs free energy of reaction	ACt2r	2.4789569			
 Gibbs free energy of reaction	ADK1	11.323804			
 Gibbs free energy of reaction	AKGDH	-43.903381			
 Gibbs free energy of reaction	ATPM	9.2039303			
 Gibbs free energy of reaction	Biomass_Ecoli_core_w_GAM	-407.70352			
-Gibbs free energy of reaction	CO2t	0.21971158			
+Gibbs free energy of reaction	CO2t	2.4789569			
 Gibbs free energy of reaction	CS	-26.283298			
-Gibbs free energy of reaction	CYTBD	-0.31356179			
-Gibbs free energy of reaction	ENO	-4.5625427			
-Gibbs free energy of reaction	FBA	-1.0018936			
-Gibbs free energy of reaction	FORti	1.1986258			
-Gibbs free energy of reaction	FRD7	4.9375637			
-Gibbs free energy of reaction	FUM	-1.042976			
-Gibbs free energy of reaction	FUMt2_2	1.1294444			
-Gibbs free energy of reaction	G6PDH2r	-2.1557651			
-Gibbs free energy of reaction	GAPD	3.6320877			
-Gibbs free energy of reaction	GLCpts	4.9576259			
+Gibbs free energy of reaction	CYTBD	-2.4789569			
+Gibbs free energy of reaction	ENO	-4.5625428			
+Gibbs free energy of reaction	FBA	-2.478957			
+Gibbs free energy of reaction	FORti	-2.4789569			
+Gibbs free energy of reaction	FRD7	4.9375638			
+Gibbs free energy of reaction	FUM	-2.478957			
+Gibbs free energy of reaction	FUMt2_2	2.478957			
+Gibbs free energy of reaction	G6PDH2r	-2.4789815			
+Gibbs free energy of reaction	GAPD	-2.4789569			
+Gibbs free energy of reaction	GLCpts	-2.4789569			
 Gibbs free energy of reaction	GLUDy	10.491252			
-Gibbs free energy of reaction	GLUN	3.686866			
-Gibbs free energy of reaction	GND	2.2227142			
-Gibbs free energy of reaction	H2Ot	0.42119232			
-Gibbs free energy of reaction	ICDHyr	5.8660756			
-Gibbs free energy of reaction	ICL	22.103359			
-Gibbs free energy of reaction	MALS	13.418871			
-Gibbs free energy of reaction	MDH	12.683543			
+Gibbs free energy of reaction	GLUN	3.6868661			
+Gibbs free energy of reaction	GND	-2.4789569			
+Gibbs free energy of reaction	H2Ot	2.4789569			
+Gibbs free energy of reaction	ICDHyr	-2.4789569			
+Gibbs free energy of reaction	ICL	-2.4789569			
+Gibbs free energy of reaction	MALS	-2.4789569			
+Gibbs free energy of reaction	MDH	-2.4789569			
 Gibbs free energy of reaction	ME2	-11.007446			
-Gibbs free energy of reaction	NADH16	18.426614			
+Gibbs free energy of reaction	NADH16	-2.4789569			
 Gibbs free energy of reaction	NADTRHD	-12.447869			
-Gibbs free energy of reaction	NH4t	-0.037893989			
-Gibbs free energy of reaction	O2t	-0.069760032			
+Gibbs free energy of reaction	NH4t	-2.4789569			
+Gibbs free energy of reaction	O2t	-2.4789569			
 Gibbs free energy of reaction	PDH	-43.691776			
-Gibbs free energy of reaction	PFK	3.7968215			
-Gibbs free energy of reaction	PFL	-4.5661407			
+Gibbs free energy of reaction	PFK	-2.4789569			
+Gibbs free energy of reaction	PFL	-4.5661408			
 Gibbs free energy of reaction	PGI	-12.934599			
-Gibbs free energy of reaction	PGK	-27.367684			
+Gibbs free energy of reaction	PGK	2.4789569			
 Gibbs free energy of reaction	PGL	-26.414433			
-Gibbs free energy of reaction	PGM	1.6126535			
-Gibbs free energy of reaction	PIt2r	0.33626024			
-Gibbs free energy of reaction	PPC	28.286944			
+Gibbs free energy of reaction	PGM	2.4789573			
+Gibbs free energy of reaction	PIt2r	-2.4789569			
+Gibbs free energy of reaction	PPC	-2.4789569			
 Gibbs free energy of reaction	PPCK	-19.082307			
 Gibbs free energy of reaction	PPS	14.936371			
-Gibbs free energy of reaction	PTAr	2.0676139			
+Gibbs free energy of reaction	PTAr	-2.4789569			
 Gibbs free energy of reaction	PYK	-17.056183			
-Gibbs free energy of reaction	RPE	-3.8306385			
-Gibbs free energy of reaction	RPI	-3.0668346			
-Gibbs free energy of reaction	SUCCt2_2	8.6933026			
-Gibbs free energy of reaction	SUCCt3	2.1063167			
-Gibbs free energy of reaction	SUCOAS	-9.6566182			
-Gibbs free energy of reaction	TALA	-1.6621485			
-Gibbs free energy of reaction	TKT1	4.9028352			
-Gibbs free energy of reaction	TKT2	12.139978			
-Gibbs free energy of reaction	TPI	2.8978398			
+Gibbs free energy of reaction	RPE	-3.8306386			
+Gibbs free energy of reaction	RPI	2.4789569			
+Gibbs free energy of reaction	SUCCt2_2	-2.4789569			
+Gibbs free energy of reaction	SUCCt3	-2.4789569			
+Gibbs free energy of reaction	SUCOAS	2.4789569			
+Gibbs free energy of reaction	TALA	-2.4789574			
+Gibbs free energy of reaction	TKT1	-2.4789569			
+Gibbs free energy of reaction	TKT2	-2.4789569			
+Gibbs free energy of reaction	TPI	-2.4789569			
+					
+!!SBtab TableID='EquilibriumConstant' TableType='Quantity' TableName='Equilibrium constant'					
+!QuantityType	!Reaction	!Value			
+equilibrium constant	ACALD	0.9509			
+equilibrium constant	ACALDt	0.9928			
+equilibrium constant	ACKr	0.9765			
+equilibrium constant	ACONTa	0.0349			
+equilibrium constant	ACONTb	1.32			
+equilibrium constant	ACt2r	0.9862			
+equilibrium constant	ADK1	0.002126			
+equilibrium constant	AKGDH	92370			
+equilibrium constant	ATPM	0.003509			
+equilibrium constant	Biomass_Ecoli_core_w_GAM	121.7			
+equilibrium constant	CO2t	1.002			
+equilibrium constant	CS	99990			
+equilibrium constant	CYTBD	1.065			
+equilibrium constant	ENO	5.193			
+equilibrium constant	FBA	1.558			
+equilibrium constant	FORti	0.5984			
+equilibrium constant	FRD7	0.3437			
+equilibrium constant	FUM	4.026			
+equilibrium constant	FUMt2_2	1.012			
+equilibrium constant	G6PDH2r	12.84			
+equilibrium constant	GAPD	0.0003528			
+equilibrium constant	GLCpts	0.9918			
+equilibrium constant	GLUDy	0.1611			
+equilibrium constant	GLUN	0.1924			
+equilibrium constant	GND	10.56			
+equilibrium constant	H2Ot	0.9895			
+equilibrium constant	ICDHyr	80.15			
+equilibrium constant	ICL	0.01881			
+equilibrium constant	MALS	0.03068			
+equilibrium constant	MDH	1.941e-05			
+equilibrium constant	ME2	773.9			
+equilibrium constant	NADH16	0.02215			
+equilibrium constant	NADTRHD	0.195			
+equilibrium constant	NH4t	0.9954			
+equilibrium constant	O2t	1.013			
+equilibrium constant	PDH	99990			
+equilibrium constant	PFK	0.09103			
+equilibrium constant	PFL	1.008			
+equilibrium constant	PGI	93.64			
+equilibrium constant	PGK	685.4			
+equilibrium constant	PGL	20630			
+equilibrium constant	PGM	0.8334			
+equilibrium constant	PIt2r	0.9939			
+equilibrium constant	PPC	1e-05			
+equilibrium constant	PPCK	350.8			
+equilibrium constant	PPS	7.448e-05			
+equilibrium constant	PTAr	1.035			
+equilibrium constant	PYK	22160			
+equilibrium constant	RPE	3.893			
+equilibrium constant	RPI	4.506			
+equilibrium constant	SUCCt2_2	0.1002			
+equilibrium constant	SUCCt3	0.2229			
+equilibrium constant	SUCOAS	0.5818			
+equilibrium constant	TALA	0.1127			
+equilibrium constant	TKT1	0.1118			
+equilibrium constant	TKT2	0.1129			
+equilibrium constant	TPI	0.1076			

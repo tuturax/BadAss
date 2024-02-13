@@ -35,21 +35,30 @@ class Metabolite_class:
     def add(self, name: str, external=False, concentration=1.0):
         ### Description of the fonction
         """
-        Fonction to add a matabolite to the model
+        Fonction to add a metabolite to the model\n
+            If it is already in, it change the properties
+        
+        Parameters
+        ----------
+        name          : str
+            Name of the metabolite\n
 
-        name          : Name of the metabolite
-
-        external      : Boolean to say if the metabolite is external
-        concentration : Concentration of the metabolite
+        external      : bool
+            is the metabolite external ?\n
+        
+        concentration : float
+            Concentration of the metabolite at the reference state
 
         """
         # Look if the metabolite class was well intialised
         if type(self.df) != type(pd.DataFrame()):
             self.df = pd.DataFrame(columns=["External", "Concentration (mmol/gDW)"])
-
-        # Look if the metabolite is already in the model
-        elif name in self.df.index:
-            print('The metabolite "' + name + '" is already in the model !')
+        
+        elif not isinstance(external, bool) :
+            raise TypeError(f"The input argument 'external' must be a bool, not a {type(external)}")
+    
+        elif not isinstance(concentration, (int,float)) :
+            raise TypeError(f"The input argument 'concentration' must be a number, not a {type(concentration)}")
 
         # Else, the metabolite is add to the model by an add to the DataFrame
         else:
@@ -82,9 +91,16 @@ class Metabolite_class:
         """
         Fonction to change a metabolite properties in the model
 
-        name           : Name of the metabolite to change
-        external       : Bool to specifies if the metabolite is external
-        concentration  : Float for the concentration of the metabolites
+        Parameters
+        ----------
+        name           : str
+            Name of the metabolite to change\n
+
+        external       : bool
+            Is the metabolite external ?\n
+        
+        concentration  : float
+            Concentration of the metabolites at the reference state\n
 
         /!\ If you use external metabolite as parameters
         """
@@ -123,8 +139,11 @@ class Metabolite_class:
         ### Description of the fonction
         """
         Fonction to remove a metabolite to the model
-
-        name        : Name of the metabolite to remove
+        
+        Parameters
+        ----------
+        name        : str
+            Name of the metabolite to remove
         """
 
         # Look if the metabolite is in the model
@@ -170,11 +189,17 @@ class Metabolite_class:
         ### Description of the fonction
         """
         Internal function to update the metabolite dataframe after a change of the stoichiometric matrix
+        
+        Parameters
+        ----------
+        name          : str
+            Name of the metabolite\n
 
-        name          : Name of the metabolite
-
-        external      : Boolean to say if the metabolite is external
-        concentration : Concentration of the metabolite
+        external      : bool
+            Is the metabolite external ?\n
+        
+        concentration : float
+            Concentration of the metabolite at the reference state
 
         """
         # Look if the metabolite class was well intialised
