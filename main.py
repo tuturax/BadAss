@@ -105,6 +105,9 @@ class MODEL:
         self.__cache_R_s_c = None
         self.__cache_R_v_p = None
 
+        # Cache cache :)
+        self.__cache_rho = None
+        self.__cache_cov = None
         ################################
         #  Message display when the model is created
         ################################
@@ -2177,11 +2180,26 @@ class MODEL:
             reactants = reactants.split(" + ")
             for reactant in reactants :
                 stoichio, name_meta = extract_name_and_number(reactant, default=-1)
+                
+                # We remove the '_' before and after the name of the ID of the metabolite
+                if name_meta[0] == "_" :
+                    name_meta = name_meta[1:]
+                if name_meta[-1] == "_" :
+                    name_meta = name_meta[:-1]
+
                 dict_react[name_meta] = stoichio
 
             products = products.split(" + ")
             for product in products :
                 stoichio, name_meta = extract_name_and_number(product, default=1)
+
+                # We remove the '_' before and after the name of the ID of the metabolite
+                if name_meta[0] == "_" :
+                    name_meta = name_meta[1:]
+                if name_meta[-1] == "_" :
+                    name_meta = name_meta[:-1]
+
+                
                 dict_react[name_meta] = stoichio
 
             reversible = reaction[-1] == "True"
@@ -2193,7 +2211,16 @@ class MODEL:
         
         # Then we add metabolites
         for meta in metabolites :
+            # ID of the metabolite
+            # If the complete name is necessary, use meta[1] insteed
             name = meta[0]
+
+            # We remove the '_' before and after the name of the ID of the metabolite
+            if name[0] == "_" :
+                name = name[1:]
+            if name[-1] == "_" :
+                name = name[:-1]
+
             external = meta[4] == "True"
             concentration = float(meta[5])
             
@@ -2207,7 +2234,89 @@ class MODEL:
             
 
 
+    #############################################################################
+    #############   Function to display the escher map  #########################
+    def escher_meta(self, studied_meta="glc_e", result= "rho", model_json= '../Exemples/SBTab/e_coli_core.json', map_json = './../Exemples/SBTab/e_coli_core.Core metabolism.json'):
+        ### Description of the fonction
+        """
+        Fonction display the Escher map
+        
+        Parameters
+        ----------
+        """
 
+        import escher
+        from escher import Builder
+
+        # Check if the input metabolite to sutdy is in the model
+        if studied_meta not in self.metabolites.df.index :
+            raise ValueError(f"The input value '{studied_meta}' of the 'studied_value' argument is not in the metabite dataframe !\n")
+
+        # If the metabolite si external, then we have to look the parameters
+        if self.metabolites.df.at[studied_meta, "External"] :
+            studied_meta = studied_meta+"_para"
+
+        escher.rc['never_ask_before_quit'] = True
+
+        # Definition of the Escher Builder
+        builder = Builder(
+            height=600,
+            map_name=None,
+            model_json = model_json,
+            map_json= map_json,
+        )
+        
+
+        # Definition of the matrix of value
+        # And change of the scale of the circle displayed
+        if result.lower() == "mi" :
+            matrix = self.MI
+
+            builder.metabolite_scale = [
+            { 'type': 'value', 'value': 0.0, 'color': 'rgba(100, 100, 100, 0.0)', 'size': 20},
+            { 'type': 'max'  ,               'color': 'rgba(  0,   0, 100, 1.0)', 'size': 40}
+            ]
+
+
+        else :
+            matrix = self.corelation
+
+            """
+            builder.metabolite_scale = [
+            { 'type': 'value', 'value': -1.0, 'color': 'rgba(100, 0,   0, 1.0)', 'size': 40},
+            { 'type': 'value', 'value':  0.0, 'color': 'rgba(100, 0, 100, 0.0)', 'size': 20},
+            { 'type': 'value', 'value':  1.0, 'color': 'rgba(  0, 0, 100, 1.0)', 'size': 40}
+            ]"""
+
+            builder.metabolite_scale = [
+            { 'type': 'min'  ,               'color': 'rgba(100, 0,   0, 1.0)', 'size': 40},
+            { 'type': 'value', 'value': 0.0, 'color': 'rgba(100, 0, 100, 0.0)', 'size': 20},
+            { 'type': 'max'  ,               'color': 'rgba(  0, 0, 100, 1.0)', 'size': 40}
+            ]
+
+
+        dict_value = {}
+
+        # For every metabolite of the model
+        for meta in self.metabolites.df.index :
+            # If the metabolite is internal
+            if not self.metabolites.df.at[meta, "External"] :
+                dict_value[meta] = matrix.at[studied_meta, meta]
+            else :
+                dict_value[meta] = matrix.at[studied_meta, meta+"_para"]
+
+        # Implementation of the value to the escher builder
+        builder.metabolite_data = dict_value
+
+        # If the metabolite aren't in the model, then they are not display
+        builder.metabolite_no_data_size = 5
+        builder.metabolite_no_data_color = 'rgba(100, 100, 100, 1.0)'
+
+
+
+
+        from IPython.display import display
+        display(builder)
 
 
     #############################################################################
