@@ -13,11 +13,15 @@ INRAE, MaIAGE
 #                                                                                #
 ##################################################################################
 
+# Computation module
 import numpy as np
-import pandas as pd
 import sympy
 from scipy.linalg import expm
 import random
+import pandas as pd
+
+# Model module
+import libsbml
 
 # Graphic interface
 import tkinter as tk
@@ -1095,11 +1099,11 @@ class MODEL:
 
         return MI
 
-    #################################################################################
-    ############    Function that return the Mutual Inforamtion matrix   ############
+    ############################################################################################################
+    ############    Function that compute the change of distribution after the fixation of values   ############
     def group_entropy_fixed_vector(
         self,
-        elements_to_fixe: list,
+        elements_to_fixe=[],
         elements_to_study=[],
         new_mean_fixed=[],
         return_all=False,
@@ -1109,11 +1113,19 @@ class MODEL:
         """
         Fonction to compute the entropy of a group when a vector parameter is fixed
 
-        elements_to_fixe  : a list contenning string of the variables/parameter to fixed
-        elements_to_study : a list contenning a strings of the variables/parameter to regroup for the study
-        new_mean_vector   : a list contenning a the new mean of the fixed vector
+        elements_to_fixe  : str or list
+            a string or a list of string representing the variables/parameter to fixed
+            if == [] (by default), nothing is fixed \n
 
-        if elements_to_study = [] (by defalut) we take all variables/parameters indivudually
+        elements_to_study : str or list
+            a string or a list of string representing the variables/parameter to study, 
+            if == [] (by defalut), all variables/parametersare study\n
+
+        new_mean_vector   : list
+            a list contenning a the new mean of the fixed elements
+            If == [] (by default), we take the current mean\n
+
+        
         """
         # Line to deal with the ./0 case
         np.seterr(divide="ignore", invalid="ignore")
@@ -1138,54 +1150,63 @@ class MODEL:
         # Check of the input variables
 
         # First we check the elements that the user want to fixe
-        # If the fixed_elements list is empty (by default), we fix every single variables and parameters
-        if elements_to_fixe == []:
-            raise ValueError("Please enter a least 1 element of the model !")
+        # If the fixed_elements list is empty (by default), nothing is fixed
+        # If it is a str, we convert it into a list
+        if isinstance(elements_to_fixe, str) :
+            if elements_to_fixe == "" :
+                elements_to_fixe = []
+            else :
+                elements_to_fixe = [elements_to_fixe]
 
-        # If we just take as input a list of str, we just transform it into a list of list
-        else:
-            for element in elements_to_fixe:
-                if element not in Cov_df:
-                    raise NameError(
-                        f"The elements '{element}' in the elements_to_fixe input is not in the model !"
-                    )
+        # Then we check every fixed elements to see if they are in the model
+        for element in elements_to_fixe:
+            if element not in Cov_df:
+                raise NameError(f"The elements '{element}' in the elements_to_fixe input is not in the model !")
+
+        if not isinstance(elements_to_fixe, list):
+            raise type("The input argument 'elements_to_fixe' must be a list of string or a single string for the case of 1 element to fixe !\n")
+
 
         # Then we check the elements to study
         # If the groups variables is empty (by default), we study every single variables and parameters
         if elements_to_study == []:
             for index in self.covariance.index:
                 elements_to_study.append(index)
-
+        
+        # If the element to study is a string, it mean there is only 1 element to study
         elif isinstance(elements_to_study, str):
             elements_to_study = [elements_to_study]
 
         if not isinstance(elements_to_study, list):
-            raise type(
-                "The input argument 'elements_to_study' must be a list of string or a single string for the case of 1 element to study !"
-            )
+            raise type("The input argument 'elements_to_study' must be a list of string or a single string for the case of 1 element to study !\n")
 
+        
         # Finally, we check what the user input for the mean vector
-        # We fill a list that contnaing the old value of mean
+
+        # If the mean vector is a single value, we convert it to a list of 1 element
+        if isinstance(new_mean_fixed, (float, int)) :
+            new_mean_fixed = [new_mean_fixed]
+
+        # We check the type of the fixed mean vector
+        if not isinstance(new_mean_fixed, list):
+            if isinstance(new_mean_fixed, np.ndarray):
+                new_mean_fixed = new_mean_fixed.tolist()
+            else : 
+                raise TypeError(f"The input argument 'new_mean_vector' must be a list or a numpy vector of number !")
+
+        # We fill a list that contnaing the old value of mean of the fixed vector
         old_mean_fixed = []
         for element in elements_to_fixe:
             old_mean_fixed.append(mean_in_the_model(element))
 
-        # Then we check what the user input
         # In the case of an empty list (by default), we fill it by the old value of mean
         if new_mean_fixed == []:
             new_mean_fixed = old_mean_fixed
 
-        if not isinstance(new_mean_fixed, list):
-            print(type(new_mean_fixed))
-            if isinstance(new_mean_fixed, np.ndarray):
-                new_mean_fixed.tolist()
-            else : 
-                raise TypeError(f"The input argument 'new_mean_vector' must be a list of number !")
-
-        elif len(new_mean_fixed) != len(elements_to_fixe):
-            raise ValueError(
-                f"The number of element for the input 'elements_to_fixe' and 'new_mean_vector' isn't matching, {len(elements_to_fixe)} VS {len(new_mean_fixed)} !"
-            )
+        # Case of the size
+        if len(elements_to_fixe) != len(new_mean_fixed) and new_mean_fixed != [] :
+            raise ValueError(f"The size of 'elements_to_fixe'={len(elements_to_fixe)} and 'new_mean_fixed'={len(new_mean_fixed)} must be the same !\n")
+        
 
         new_mean_fixed = np.array(new_mean_fixed)
         old_mean_fixed = np.array(old_mean_fixed)
@@ -1459,7 +1480,7 @@ class MODEL:
 
     ################################################################################
     #                                                                              #
-    # linear # SBML # XML # Cobra # JSON # CSV # Check # unstable # driving-forces #
+    # boxplot # heatmap # MI # Escher # plot # correlation # Graphic interface
     #                                                                              #
     ################################################################################
     #                                                                              #
@@ -1704,13 +1725,14 @@ class MODEL:
     #############################################################################
     #############   Function display a graphic interface   ######################
     def graphic_interface(self) :
+        ### Description of the fonction
+        """
+        Fonction to display a window with a graphic interface
+        
+        Parameters
+        ----------
 
-        import tkinter as tk
-        from tkinter import ttk
-        import matplotlib.pyplot as plt
-        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-        import numpy as np
-
+        """
         # Fonction to plot boxplot depending of the variable selected by the user
         def update_plot(*args):
             # Get the value of the interactive interface
@@ -1858,6 +1880,229 @@ class MODEL:
 
 
 
+
+
+    #############################################################################
+    #############   Function to display the escher map  #########################
+    def escher_meta(self, studied="glc_e", result= "rho", model_json= '../Exemples/SBTab/e_coli_core.json', map_json = './../Exemples/SBTab/e_coli_core.Core metabolism.json'):
+        ### Description of the fonction
+        """
+        Fonction display the Escher map
+        
+        Parameters
+        ----------
+
+        studied : str
+            Name of the central metabolite\n
+        
+        result : str
+            type of the display result (by default the correlation)\n
+
+        model_json : str
+            directory of the json file of the model\n
+        
+        map_json :
+            directory of the json file of the map
+        """
+
+        # Definition of the matrix of value
+        if result.lower() == "mi" :
+            matrix = self.MI
+        else :
+            matrix = self.corelation
+
+
+        import escher
+        from escher import Builder
+
+        # Check if the input metabolite to sutdy is in the model
+        if studied not in matrix.index :
+            raise ValueError(f"The input value '{studied}' of the 'studied' argument is not in the model !\n")
+
+
+        escher.rc['never_ask_before_quit'] = True
+
+        # Definition of the Escher Builder
+        builder = Builder(
+            height=600,
+            map_name=None,
+            model_json = model_json,
+            map_json= map_json,
+        )
+        
+
+
+        # Change of the scale of the circle displayed
+        if result.lower() == "mi" :
+
+            builder.metabolite_scale = [
+            { 'type': 'value', 'value': 0.0, 'color': 'rgba(100, 100, 100, 0.0)', 'size': 20},
+            { 'type': 'max'  ,               'color': 'rgba(  0,   0, 100, 1.0)', 'size': 40}
+            ]
+
+
+        else :
+            """
+            builder.metabolite_scale = [
+            { 'type': 'value', 'value': -1.0, 'color': 'rgba(100, 0,   0, 1.0)', 'size': 40},
+            { 'type': 'value', 'value':  0.0, 'color': 'rgba(100, 0, 100, 0.0)', 'size': 20},
+            { 'type': 'value', 'value':  1.0, 'color': 'rgba(  0, 0, 100, 1.0)', 'size': 40}
+            ]"""
+
+            builder.metabolite_scale = [
+            { 'type': 'min'  ,               'color': 'rgba(100, 0,   0, 1.0)', 'size': 40},
+            { 'type': 'value', 'value': 0.0, 'color': 'rgba(100, 0, 100, 0.0)', 'size': 20},
+            { 'type': 'max'  ,               'color': 'rgba(  0, 0, 100, 1.0)', 'size': 40}
+            ]
+
+
+        dict_value = {}
+
+        # For every metabolite of the model
+        for meta in self.metabolites.df.index :
+            # If the metabolite is internal
+            if not self.metabolites.df.at[meta, "External"] :
+                dict_value[meta] = matrix.at[studied, meta]
+            else :
+                dict_value[meta] = matrix.at[studied, meta+"_para"]
+
+        # Implementation of the value to the escher builder
+        builder.metabolite_data = dict_value
+
+        # If the metabolite aren't in the model, then they are not display
+        builder.metabolite_no_data_size = 5
+        builder.metabolite_no_data_color = 'rgba(100, 100, 100, 1.0)'
+
+
+
+
+        from IPython.display import display
+        display(builder)
+
+
+    #############################################################################
+    #############   Function to display the escher map  #########################
+    def escher_mean_deviation(self, fixed_element=[], fixed_value=[], model_json= '../Exemples/SBTab/e_coli_core.json', map_json = './../Exemples/SBTab/e_coli_core.Core metabolism.json'):
+        ### Description of the fonction
+        """
+        Fonction display the Escher map of the model with the deviation of the mean after the fixation of a variable as value
+        
+        Parameters
+        ----------
+
+        fixed : str
+            Name of the central metabolite\n
+        
+        fixed_value : str
+            type of the display result (by default the correlation)\n
+
+        model_json : str
+            directory of the json file of the model\n
+        
+        map_json :
+            directory of the json file of the map
+        """
+        import escher
+        from escher import Builder
+
+        escher.rc['never_ask_before_quit'] = True
+
+        # Definition of the Escher Builder
+        builder = Builder(
+            height=600,
+            map_name=None,
+            model_json = model_json,
+            map_json= map_json,
+        )
+        
+
+        # Scale of the circle
+        builder.metabolite_scale = [
+        { 'type': 'min'  ,               'color': 'rgba(100, 0,   0, 1.0)', 'size': 40},
+        { 'type': 'value', 'value': 0.0, 'color': 'rgba(100, 0, 100, 0.0)', 'size': 20},
+        { 'type': 'max'  ,               'color': 'rgba(  0, 0, 100, 1.0)', 'size': 40}
+        ]
+
+        # mean dataframe
+        mean_df = self.group_entropy_fixed_vector(elements_to_fixe=fixed_element, elements_to_study=[], new_mean_fixed=fixed_value, return_all=True)[1]
+
+        dict_value = {}
+
+        # For every metabolite of the model
+        for meta in self.metabolites.df.index :
+            # If the metabolite is internal
+            if not self.metabolites.df.at[meta, "External"] :
+                dict_value[meta] = mean_df.at[meta, "Delta mean"]
+            else :
+                dict_value[meta] = mean_df.at[meta+"_para", "Delta mean"]
+
+        # Implementation of the value to the escher builder
+        builder.metabolite_data = dict_value
+
+        # If the metabolite aren't in the model, then they are not display
+        builder.metabolite_no_data_size = 5
+        builder.metabolite_no_data_color = 'rgba(100, 100, 100, 1.0)'
+
+
+        from IPython.display import display
+        display(builder)
+
+    #############################################################################
+    #############   Function to display the escher map  #########################
+    def escher_reference(self, model_json= '../Exemples/SBTab/e_coli_core.json', map_json = './../Exemples/SBTab/e_coli_core.Core metabolism.json'):
+        ### Description of the fonction
+        """
+        Fonction display the Escher map with the reference value
+        
+        Parameters
+        ----------
+
+        model_json : str
+            directory of the json file of the model\n
+        
+        map_json :
+            directory of the json file of the map
+        """
+        import escher
+        from escher import Builder
+
+        escher.rc['never_ask_before_quit'] = True
+
+        # Definition of the Escher Builder
+        builder = Builder(
+            height=600,
+            map_name=None,
+            model_json = model_json,
+            map_json= map_json,
+        )
+        
+
+        dict_value = {}
+
+        # For every metabolite of the model
+        for meta in self.metabolites.df.index :
+            dict_value[meta] = self.metabolites.df.at[meta, "Concentration (mmol/gDW)"]
+
+        # Implementation of the value to the escher builder
+        builder.metabolite_data = dict_value
+
+        dict_value = {}
+        for react in self.reactions.df.index :
+            dict_value[react] = self.reactions.df.at[react, "Flux (mmol/gDW/h)"]
+
+        builder.reaction_data = dict_value
+
+        # If the metabolite aren't in the model, then they are not display
+        builder.metabolite_no_data_size = 5
+        builder.metabolite_no_data_color = 'rgba(100, 100, 100, 1.0)'
+
+
+
+
+        from IPython.display import display
+        display(builder)
+
+
     ################################################################################
     #                                                                              #
     # linear # SBML # XML # Cobra # JSON # CSV # SBtab # check # driving-forces    #
@@ -1951,7 +2196,7 @@ class MODEL:
         reference_state_reactions="reference_state_reactions.tsv",
         reference_state_v="reference_state_v.tsv",
         reference_state_keq="reference_state_keq.tsv",
-        ignore_error=False,
+        ignore_error=True,
     ):
         ### Description of the fonction
         """
@@ -1981,10 +2226,10 @@ class MODEL:
         reference_state_keq         : str
             name of the database of reaction equibrlium constant \n
             
-        ignor_error                 : Bool
+        ignor_error                 : bool
             to specify if you want to continue th reading process, even if there is an error in the SBML file
         """
-        import libsbml
+        
 
         # Reset of the model
         self.reset
@@ -2075,13 +2320,10 @@ class MODEL:
                 for i in range(len(list_metabolites)):
                     if list_metabolites[i] in self.metabolites.df.index:
                         # Attribution of the concentrations to the dataframe
-                        self.metabolites.df.at[list_metabolites[i], "Concentration (mmol/gDW)"] = float(
-                            list_concentrations[i]
-                        )
+                        self.metabolites.df.at[list_metabolites[i], "Concentration (mmol/gDW)"] = float(list_concentrations[i])
                     else:
-                        print(
-                            f"Warning : The metabolite {list_metabolites[i]} is not in the SBML file of the metabolic network !"
-                        )
+                        print(f"Warning : The metabolite {list_metabolites[i]} is not in the SBML file of the metabolic network !")
+
         # Reading the reactions list
         if os.path.exists(directory + reference_state_reactions):
             list_reactions = tsv_to_list(directory + reference_state_reactions)
@@ -2106,6 +2348,228 @@ class MODEL:
                         self.reactions.df.at[list_reactions[i], "Equilibrium constant"] = float(list_keq[i])
 
 
+
+    #############################################################################
+    ###################   Function to check the model   #########################
+    def BadAss2SBML(self, creat_file_model = True, file_name = "sbml_file.xml"):
+        ### Description of the fonction
+        """
+        Fonction create a SBML file from the current model
+        
+        Parameters
+        ----------
+
+        creat_file_model     : bool 
+            Possibility to creat a file with the model in a .XML file 
+        """
+        #import libsbml
+        def check(value, message):
+            """If 'value' is None, prints an error message constructed using
+            'message' and then exits with status code 1.  If 'value' is an integer,
+            it assumes it is a libSBML return status code.  If the code value is
+            LIBSBML_OPERATION_SUCCESS, returns without further action; if it is not,
+            prints an error message constructed using 'message' along with text from
+            libSBML explaining the meaning of the code, and exits with status code 1.
+            """
+            if value is None:
+                raise SystemExit('LibSBML returned a null value trying to ' + message + '.')
+            elif type(value) is int:
+                if value == libsbml.LIBSBML_OPERATION_SUCCESS:
+                    return
+                else:
+                    err_msg = 'Error encountered trying to ' + message + '.' \
+                            + 'LibSBML returned error code ' + str(value) + ': "' \
+                            + libsbml.OperationReturnValue_toString(value).strip() + '"'
+                    raise SystemExit(err_msg)
+            else:
+                return
+
+        try:
+            document = libsbml.SBMLDocument(3, 1)
+        except ValueError:
+            raise SystemExit('Could not create SBMLDocument object')
+        
+        # Create the basic Model object inside the SBMLDocument object.  To
+        # produce a model with complete units for the reaction rates, we need
+        # to set the 'timeUnits' and 'extentUnits' attributes on Model.  We
+        # set 'substanceUnits' too, for good measure, though it's not strictly
+        # necessary here because we also set the units for individual species
+        # in their definitions.
+        
+        model = document.createModel()
+        
+        check(model,                              'create model')
+        check(model.setId("Ec_core"),             'set model ID')
+        check(model.setName("Ec_core"),           'set model name')
+        check(model.setTimeUnits("second"),       'set model-wide time units')
+        check(model.setExtentUnits("mole"),       'set model units of extent')
+        check(model.setSubstanceUnits('mole'),    'set model substance units')
+
+        # Create a unit definition we will need later.  Note that SBML Unit
+        # objects must have all four attributes 'kind', 'exponent', 'scale'
+        # and 'multiplier' defined.
+
+        per_second = model.createUnitDefinition()
+        check(per_second,                         'create unit definition')
+        check(per_second.setId('per_second'),     'set unit definition id')
+        unit = per_second.createUnit()
+        check(unit,                               'create unit on per_second')
+        check(unit.setKind(libsbml.UNIT_KIND_SECOND),     'set unit kind')
+        check(unit.setExponent(-1),               'set unit exponent')
+        check(unit.setScale(0),                   'set unit scale')
+        check(unit.setMultiplier(1),              'set unit multiplier')
+
+        # Create species inside this model, set the required attributes
+        # for each species in SBML Level 3 (which are the 'id', 'compartment',
+        # 'constant', 'hasOnlySubstanceUnits', and 'boundaryCondition'
+        # attributes), and initialize the amount of the species along with the
+        # units of the amount.
+        dict_meta = {}
+        for meta in self.metabolites.df.index :
+            # Creation of a species in the model
+            s = model.createSpecies()
+            check(s,                                                                                   'create species ' + meta)
+            check(s.setId("ID_"+meta),                                                                'set species '+ meta + ' ID')
+            check(s.setName(meta),                                                                'set species '+ meta + ' name')
+            check(s.setInitialAmount(self.metabolites.df.at[meta, "Concentration (mmol/gDW)"]),     'set initial amount for ' + meta)
+            check(s.setSubstanceUnits('mole'),                                                      'set substance units for ' + meta)
+            check(s.setBoundaryCondition(bool(self.metabolites.df.at[meta, "External"])),           'set "boundaryCondition" on ' + meta)
+            dict_meta[meta] = s
+
+        # Create parameters object inside this model, set the required
+        # attributes 'id' and 'constant' for a parameter in SBML Level 3, and
+        # initialize the parameter with a value along with its units.
+        for para in self. parameters.df.index :
+            # Creation of parameter in the model
+            p = model.createParameter()
+            check(p,                                                            'create parameter ' + para)
+            check(p.setId(para),                                                'set parameter '+para+' id')
+            check(p.setConstant(True),                                          'set parameter '+para+' "constant"')
+            check(p.setValue(self.parameters.df.at[para, "Mean values"]),       'set parameter '+para+' value')
+            check(p.setUnits('per_second'),                                     'set parameter '+para+' units')
+            note = "<body xmlns='http://www.w3.org/1999/xhtml'><p>SD:"+str(self.parameters.df.at[para,"Standard deviation"])+"</p></body>"
+            check(p.setNotes(note),                                         'set parameter '+para+' notes')
+        
+        # Create reactions inside this model, set the reactants and products,
+        # and set the reaction rate expression (the SBML "kinetic law").  We
+        # set the minimum required attributes for all of these objects.  The
+        # units of the reaction rate are determined from the 'timeUnits' and
+        # 'extentUnits' attributes on the Model object.
+        for react in self.reactions.df.index :
+            # Creation of a reaction of the model
+            r = model.createReaction()
+            dict_stoichio = self.reactions.df.at[react, "Metabolites"]
+
+            check(r,                                                                    'create reaction')
+            check(r.setId(react),                                                       'set reaction id')
+            check(r.setName(react),                                                     'set reaction name')
+            check(r.setReversible(bool(self.reactions.df.at[react, "Reversible"])),     'set reaction reversibility flag')
+            check(r.createKineticLaw(),                                                 'set reaction kinetic law')
+            
+            kinetic_law = r.getKineticLaw()
+            list_para = libsbml.ListOfParameters
+            # Creation and add of parameter to the reaction
+            parameter_lb = kinetic_law.createParameter()
+            parameter_lb.setId("LOWER_BOUND")
+            if self.reactions.df.at[react, "Reversible"] :
+                parameter_lb.setValue(-10000.0)
+            else :
+                parameter_lb.setValue(0.0)
+            parameter_lb.setUnits("mmol_per_gDW_per_hr")
+
+            parameter_ub = kinetic_law.createParameter()
+            parameter_ub.setId("UPPER_BOUND")
+            parameter_ub.setValue(10000.0)
+            parameter_ub.setUnits("mmol_per_gDW_per_hr")
+
+            parameter_flux = kinetic_law.createParameter()
+            parameter_flux.setId("FLUX_VALUE")
+            parameter_flux.setValue(self.reactions.df.at[react, "Flux (mmol/gDW/h)"])
+            parameter_flux.setUnits("mmol_per_gDW_per_hr")
+
+
+
+
+            for meta in dict_stoichio :
+                if dict_stoichio[meta] < 0 :
+                    r.addReactant(dict_meta[meta],dict_stoichio[meta])
+                else : 
+                    r.addProduct(dict_meta[meta],dict_stoichio[meta])
+            
+        # Creation of a .XML file of the model
+        if creat_file_model :
+            libsbml.writeSBMLToFile(d=document, filename=file_name)
+        
+        return(document.getModel())
+
+
+
+
+    #############################################################################
+    ###################   Function to check the model   #########################
+    def BadAss2Cobra(self, creat_file_model = True, file_name = "cobra_file.json"):
+        ### Description of the fonction
+        """
+        Fonction create a Cobra model from the current BadAss model
+        
+        Parameters
+        ----------
+
+        creat_file_model     : bool 
+            Possibility to creat a file with the model in a .JSON file \n
+
+        file_name : str
+            Name of the file to creat
+        """
+        import cobra
+
+        # Initialisation of the usfull variable to build the Cobra model
+        # The metabolite
+        metabolites = self.metabolites.df.index
+        
+        # And the reaction
+        reactions = []
+        for react in self.reactions.df.index :
+            reactions.append({})
+            reactions[-1]["name"] = react
+            reactions[-1]["substrates"] = {}
+            reactions[-1]["products"] = {}
+
+            dict_stoichio = self.reactions.df.at[react, "Metabolites"]
+
+            for meta in dict_stoichio.keys() :
+                
+                if dict_stoichio[meta] < 0 :
+                    reactions[-1]["substrates"][meta] = -float(dict_stoichio[meta])
+                else : 
+                    reactions[-1]["products"][meta] = float(dict_stoichio[meta])
+
+
+        # Creation of an empty model
+        model = cobra.Model()
+
+        # Add of the metabolite to the model
+        for metabolite in metabolites:
+            model.add_metabolites(cobra.Metabolite(metabolite))
+
+        # Add of the reaction in the model
+        for reaction_data in reactions:
+            reaction = cobra.Reaction(reaction_data['name'])
+            
+            # Add of the substrate to the model
+            for substrate, coefficient in reaction_data['substrates'].items():
+                reaction.add_metabolites({model.metabolites.get_by_id(substrate): -coefficient})
+            
+            # Add of the product to the model
+            for product, coefficient in reaction_data['products'].items():
+                reaction.add_metabolites({model.metabolites.get_by_id(product): coefficient})
+            
+            model.add_reactions([reaction])
+        
+        if creat_file_model :
+            cobra.io.save_json_model(model, filename=file_name)
+
+        return(model)
 
     #############################################################################
     ###################   Function to read a SBTab file  #########################
@@ -2175,39 +2639,43 @@ class MODEL:
             # We split the equation str in 2, the first part is the reactants, the second one is the products
             reactants, products = reaction[1].split(" <=> ")
 
-            dict_react = {}
+           
+            dict_meta = {}
 
+            # First we deal with the reactants
+            # We split each reactants
             reactants = reactants.split(" + ")
             for reactant in reactants :
-                stoichio, name_meta = extract_name_and_number(reactant, default=-1)
-                
+                stoichio, name_meta = extract_name_and_number(reactant, default=1)
+                # Add a negative therme to the stoichio coeff to represent the fact that it is a reactant
+                stoichio *= -1
                 # We remove the '_' before and after the name of the ID of the metabolite
                 if name_meta[0] == "_" :
                     name_meta = name_meta[1:]
                 if name_meta[-1] == "_" :
                     name_meta = name_meta[:-1]
 
-                dict_react[name_meta] = stoichio
+                dict_meta[name_meta] = stoichio
 
+            # Then we deal with the products
             products = products.split(" + ")
             for product in products :
                 stoichio, name_meta = extract_name_and_number(product, default=1)
-
+                
                 # We remove the '_' before and after the name of the ID of the metabolite
                 if name_meta[0] == "_" :
                     name_meta = name_meta[1:]
                 if name_meta[-1] == "_" :
                     name_meta = name_meta[:-1]
 
-                
-                dict_react[name_meta] = stoichio
+                dict_meta[name_meta] = stoichio
 
             reversible = reaction[-1] == "True"
             rate = float(flux[i][-1])
 
             k_eq = float(Equilibrium_const[i][-1])
             
-            self.reactions.add(name, dict_react, k_eq=k_eq, reversible=reversible, flux=rate)
+            self.reactions.add(name, dict_meta, k_eq=k_eq, reversible=reversible, flux=rate)
         
         # Then we add metabolites
         for meta in metabolites :
@@ -2234,89 +2702,6 @@ class MODEL:
             
 
 
-    #############################################################################
-    #############   Function to display the escher map  #########################
-    def escher_meta(self, studied_meta="glc_e", result= "rho", model_json= '../Exemples/SBTab/e_coli_core.json', map_json = './../Exemples/SBTab/e_coli_core.Core metabolism.json'):
-        ### Description of the fonction
-        """
-        Fonction display the Escher map
-        
-        Parameters
-        ----------
-        """
-
-        import escher
-        from escher import Builder
-
-        # Check if the input metabolite to sutdy is in the model
-        if studied_meta not in self.metabolites.df.index :
-            raise ValueError(f"The input value '{studied_meta}' of the 'studied_value' argument is not in the metabite dataframe !\n")
-
-        # If the metabolite si external, then we have to look the parameters
-        if self.metabolites.df.at[studied_meta, "External"] :
-            studied_meta = studied_meta+"_para"
-
-        escher.rc['never_ask_before_quit'] = True
-
-        # Definition of the Escher Builder
-        builder = Builder(
-            height=600,
-            map_name=None,
-            model_json = model_json,
-            map_json= map_json,
-        )
-        
-
-        # Definition of the matrix of value
-        # And change of the scale of the circle displayed
-        if result.lower() == "mi" :
-            matrix = self.MI
-
-            builder.metabolite_scale = [
-            { 'type': 'value', 'value': 0.0, 'color': 'rgba(100, 100, 100, 0.0)', 'size': 20},
-            { 'type': 'max'  ,               'color': 'rgba(  0,   0, 100, 1.0)', 'size': 40}
-            ]
-
-
-        else :
-            matrix = self.corelation
-
-            """
-            builder.metabolite_scale = [
-            { 'type': 'value', 'value': -1.0, 'color': 'rgba(100, 0,   0, 1.0)', 'size': 40},
-            { 'type': 'value', 'value':  0.0, 'color': 'rgba(100, 0, 100, 0.0)', 'size': 20},
-            { 'type': 'value', 'value':  1.0, 'color': 'rgba(  0, 0, 100, 1.0)', 'size': 40}
-            ]"""
-
-            builder.metabolite_scale = [
-            { 'type': 'min'  ,               'color': 'rgba(100, 0,   0, 1.0)', 'size': 40},
-            { 'type': 'value', 'value': 0.0, 'color': 'rgba(100, 0, 100, 0.0)', 'size': 20},
-            { 'type': 'max'  ,               'color': 'rgba(  0, 0, 100, 1.0)', 'size': 40}
-            ]
-
-
-        dict_value = {}
-
-        # For every metabolite of the model
-        for meta in self.metabolites.df.index :
-            # If the metabolite is internal
-            if not self.metabolites.df.at[meta, "External"] :
-                dict_value[meta] = matrix.at[studied_meta, meta]
-            else :
-                dict_value[meta] = matrix.at[studied_meta, meta+"_para"]
-
-        # Implementation of the value to the escher builder
-        builder.metabolite_data = dict_value
-
-        # If the metabolite aren't in the model, then they are not display
-        builder.metabolite_no_data_size = 5
-        builder.metabolite_no_data_color = 'rgba(100, 100, 100, 1.0)'
-
-
-
-
-        from IPython.display import display
-        display(builder)
 
 
     #############################################################################

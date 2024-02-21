@@ -55,8 +55,8 @@ class Operon_class:
 
         # We look for every enzyme linked to this operon
         for enzyme in enzymes_linked:
-            # If the enzyme is in the enzyme's dataframe
-            if enzyme not in self.__class_MODEL_instance.enzymes.df.index:
+            # If the enzyme is in the enzyme or or metabolite dataframe
+            if enzyme not in (self.__class_MODEL_instance.enzymes.df.index.to_list() + self.__class_MODEL_instance.metabolites.df.index.to_list()):
                 raise NameError(
                     f"The input enzyme {enzyme} is not in the enzyme dataframe !\n"
                 )

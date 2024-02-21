@@ -83,6 +83,13 @@ class Enzymes_class:
                 )
                 self.__class_MODEL_instance._reset_value()
 
+            # Removing every mention of the enzyme in the operon dataframe
+            for operon in self.__class_MODEL_instance.operon.df.index :
+                if name in self.__class_MODEL_instance.operon.df.at[operon, "Enzymes linked"] :
+                    liste_enzym = [x for x in self.__class_MODEL_instance.operon.df.at[operon, "Enzymes linked"] if x != name]
+                    self.__class_MODEL_instance.operon.df.at[operon, "Enzymes linked"] = liste_enzym
+                    
+
     #################################################################################
     #########      Fonction to add an enzyme link to every reaction        ##########
     def add_to_all_reaction(self) -> None:
