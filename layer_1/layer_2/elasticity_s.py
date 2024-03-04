@@ -137,7 +137,7 @@ class Sub_Elasticity_class:
         c_int_df = self.__class_MODEL_instance.metabolites.df.loc[
             self.__class_MODEL_instance.metabolites.df.index.isin(N_red.index)
         ]
-        c_int = c_int_df["Concentration (mmol/gDW)"].to_numpy()
+        c_int = c_int_df["Concentration"].to_numpy()
 
         k_eq = self.__class_MODEL_instance.reactions.df[
             "Equilibrium constant"

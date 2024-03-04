@@ -41,7 +41,7 @@ class Operon_class:
             Name of the operon to add to the dataframe\n
 
         enzymes_linked      : list of str
-            list of string name enzymes linked to this operon\n
+            list of string name enzymes/parameters linked to this operon\n
         
         activated           : bool
             Is the operon activated ?
@@ -56,9 +56,9 @@ class Operon_class:
         # We look for every enzyme linked to this operon
         for enzyme in enzymes_linked:
             # If the enzyme is in the enzyme or or metabolite dataframe
-            if enzyme not in (self.__class_MODEL_instance.enzymes.df.index.to_list() + self.__class_MODEL_instance.metabolites.df.index.to_list()):
+            if enzyme not in (self.__class_MODEL_instance.parameters.df.index):
                 raise NameError(
-                    f"The input enzyme {enzyme} is not in the enzyme dataframe !\n"
+                    f"The input enzyme {enzyme} is not in the parameters dataframe !\n"
                 )
             # And if the enzyme is already link to an other operon
             for operon in self.df.index:
@@ -110,7 +110,7 @@ class Operon_class:
         # We look for every enzyme to add
         for enzyme in enzymes_to_add:
             # If the enzyme is in the enzyme's dataframe
-            if enzyme not in self.__class_MODEL_instance.enzyme.df.index:
+            if enzyme not in self.__class_MODEL_instance.parameters.df.index:
                 raise NameError(
                     f"The input enzyme {enzyme} is not in the enzyme dataframe !\n"
                 )

@@ -118,7 +118,7 @@ class Parameter_class:
                 self.__class_MODEL_instance.elasticity.p.df[enzyme + "_para"] = 0.0
 
         # For every reaction of the N matrix
-        for reaction in self.__class_MODEL_instance.Stoichio_matrix.columns:
+        for reaction in self.__class_MODEL_instance.Stoichio_matrix_pd.columns:
             # if the reaction is not in the Dataframe, we add it
             if reaction not in self.__class_MODEL_instance.elasticity.p.df.index:
                 self.__class_MODEL_instance.elasticity.p.df.loc[reaction] = 0.0

@@ -17,7 +17,7 @@ class Metabolite_class:
         # Private list to deal with the fact that a dataframe cannot be filled if there is no collumn in the dataframe
         self.__cache_meta = []
 
-        self.df = pd.DataFrame(columns=["External", "Concentration (mmol/gDW)"])
+        self.df = pd.DataFrame(columns=["External", "Concentration", "Unit"])
 
     #################################################################################
     #########           Return the Dataframe of the metabolites            ##########
@@ -52,7 +52,7 @@ class Metabolite_class:
         """
         # Look if the metabolite class was well intialised
         if type(self.df) != type(pd.DataFrame()):
-            self.df = pd.DataFrame(columns=["External", "Concentration (mmol/gDW)"])
+            self.df = pd.DataFrame(columns=["External", "Concentration", "Unit"])
         
         elif not isinstance(external, bool) :
             raise TypeError(f"The input argument 'external' must be a bool, not a {type(external)}")
@@ -65,7 +65,7 @@ class Metabolite_class:
             self.df.loc[name] = [external, concentration]
 
             # If there is no reaction in the columns of the soichio metric matrix, we keep in memeory the metabolite
-            if self.__class_MODEL_instance.Stoichio_matrix.columns.size == 0:
+            if self.__class_MODEL_instance.Stoichio_matrix_pd.columns.size == 0:
                 self.__cache_meta.append(name)
                 print(
                     "Don't worry, the metabolite will be add after the add of the 1st reaction"
@@ -75,8 +75,8 @@ class Metabolite_class:
             else:
                 self.__cache_meta.append(name)
                 for meta in self.__cache_meta:
-                    if meta not in self.__class_MODEL_instance.Stoichio_matrix.index:
-                        self.__class_MODEL_instance.Stoichio_matrix.loc[meta] = 0.0
+                    if meta not in self.__class_MODEL_instance.Stoichio_matrix_pd.index:
+                        self.__class_MODEL_instance.Stoichio_matrix_pd.loc[meta] = 0.0
 
                 self.__cache_meta = []
 
@@ -86,7 +86,7 @@ class Metabolite_class:
 
     #################################################################################
     #########           Fonction to change a metabolite                    ##########
-    def change(self, name: str, external=None, concentration=None):
+    def change(self, name: str, external=None, concentration=None, unit = "mmol/gDW"):
         ### Description of the fonction
         """
         Fonction to change a metabolite properties in the model
@@ -125,7 +125,7 @@ class Metabolite_class:
                             f"The value of the input '{concentration}' must be greater than 0 !"
                         )
                     else:
-                        self.df.at[name, "Concentration (mmol/gDW)"] = concentration
+                        self.df.at[name, "Concentration", unit] = concentration
 
                 else:
                     raise TypeError(
@@ -156,10 +156,10 @@ class Metabolite_class:
             # Else, the metabolite is remove from the dataframe
             self.df.drop(name, inplace=True)
 
-            for meta in self.__class_MODEL_instance.Stoichio_matrix.index:
+            for meta in self.__class_MODEL_instance.Stoichio_matrix_pd.index:
                 # If the the meta is not in the modified metabolite dataframe => it was deleted
                 if meta not in self.df.index:
-                    self.__class_MODEL_instance.Stoichio_matrix.drop(
+                    self.__class_MODEL_instance.Stoichio_matrix_pd.drop(
                         meta, axis=0, inplace=True
                     )
 
@@ -185,7 +185,7 @@ class Metabolite_class:
 
     #################################################################################
     #########           Fonction to update the meta dataframe              ##########
-    def _update(self, name=None, external=False, concentration=1):
+    def _update(self, name=None, external=False, concentration=1, unit = "mmol/gDW"):
         ### Description of the fonction
         """
         Internal function to update the metabolite dataframe after a change of the stoichiometric matrix
@@ -204,8 +204,8 @@ class Metabolite_class:
         """
         # Look if the metabolite class was well intialised
         if type(self.df) != type(pd.DataFrame()):
-            self.df = pd.DataFrame(columns=["External", "Concentration (mmol/gDW)"])
+            self.df = pd.DataFrame(columns=["External", "Concentration", "unit"])
 
         # Look if the metabolite is already in the model
         if name not in self.df.index:
-            self.df.loc[name] = [external, concentration]
+            self.df.loc[name] = [external, concentration, unit]

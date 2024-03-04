@@ -39,8 +39,7 @@ class Regulation_class:
     #################################################################################
     #########           Fonction to add a regulation                       ##########
     def add(
-        self, name: str, regulated: str, regulator: str, coefficient=1, allosteric=True, activated = True
-    ):
+        self, name: str, regulated: str, regulator: str, coefficient=1, allosteric=True, activated = True, **kwargs):
         ### Description of the fonction
         """
         Fonction to add a regulation to the model
@@ -114,6 +113,7 @@ class Regulation_class:
 
         # If the regulation arrow is activated, we modifiy the elasticity of the model
         if activated == True :
+
             # If the regulation is allosteric
             if allosteric == True :
                 self.__class_MODEL_instance.elasticity.s.df.at[
@@ -136,6 +136,11 @@ class Regulation_class:
                 self.__class_MODEL_instance.elasticity.s.df.at[
                     "creation_" + name, regulator
                 ] += coefficient
+
+                default_name = "para_trans_" + name
+                name_new_para = kwargs.get('name_parameter', default_name)
+
+                self.__class_MODEL_instance.parameters.add(name=name_new_para)
 
             self.__class_MODEL_instance._update_elasticity()
 

@@ -82,16 +82,17 @@ class MODEL:
         #  Initialisation of few variables of the model
         ################################
 
-        # Initialisation of the Matrix_Stoechio attribute
-        self._Stoichio_matrix = pd.DataFrame()
+        # Initialisation of the stoichiometric matrix attribute
+        self.__Stoichio_matrix_pd = pd.DataFrame()
         
         # bool to specify if the update is ON after a modification of the model
         self.__activate_update = True
 
         # Sampling file of the model
-        self.data_sampling = pd.DataFrame(
-            columns=["Name", "Type", "Mean", "Standard deviation", "Distribution"]
-        )
+        self.data_sampling = pd.DataFrame(columns=["Name", "Type", "Mean", "Standard deviation", "Distribution"])
+
+        # real data of the model
+        self.real_data = {"Flux": pd.DataFrame(columns=["Flux"]), "Concentration" : pd.DataFrame(columns=["Concentration"]), "Covariance" : pd.DataFrame()}
 
         # Frequency of the system
         self.__frequency_omega = 0.0
@@ -123,38 +124,38 @@ class MODEL:
     #################################################################################
     ######    Representation = the Dataframe of the Stoichiometric matrix     #######
     def __repr__(self) -> str:
-        return str(self._Stoichio_matrix)
+        return str(self.Stoichio_matrix_pd)
 
     #############################################################################
     ##################              Getter                  #####################
     @property
-    def Stoichio_matrix(self):
-        return self._Stoichio_matrix
+    def Stoichio_matrix_pd(self) -> pd.DataFrame :
+        return self.__Stoichio_matrix_pd
 
     @property
-    def __Stoichio_matrix(self):
-        return self.Stoichio_matrix.to_numpy(dtype="float64")
+    def Stoichio_matrix_np(self) -> np.ndarray :
+        return self.Stoichio_matrix_pd.to_numpy(dtype="float64")
 
     @property
-    def N(self):
-        return self.Stoichio_matrix
+    def N(self) -> pd.DataFrame :
+        return self.Stoichio_matrix_pd
 
     @property
-    def __N(self):
-        return self.__Stoichio_matrix
+    def __N(self) -> np.ndarray :
+        return self.Stoichio_matrix_np
 
     @property
-    def N_without_ext(self):
+    def N_without_ext(self) -> pd.DataFrame :
         N = self.N
         # We check if every metabolite is external
-        for meta in self.Stoichio_matrix.index:
+        for meta in self.Stoichio_matrix_pd.index:
             if self.metabolites.df.at[meta, "External"] == True:
                 # And remove this metabolite from the local stoichio matrix N
                 N = N.drop(meta)
         return N
 
     @property
-    def __N_without_ext(self):
+    def __N_without_ext(self) -> np.ndarray :
         return self.N_without_ext.to_numpy(dtype="float64")
 
     @property
@@ -371,10 +372,10 @@ class MODEL:
             self.__cache_R_s_c = -np.dot(
                 self.Jacobian_reversed,
                 np.dot(
-                    self.__Stoichio_matrix,
+                    self.Stoichio_matrix_np,
                     self.elasticity.s.df.to_numpy(dtype="float64"),
                 ),
-            ) + np.identity(len(self.__Stoichio_matrix))
+            ) + np.identity(len(self.Stoichio_matrix_np))
 
         return self.__cache_R_s_c
 
@@ -697,17 +698,37 @@ class MODEL:
     #############   Function to update after a modification of N  ###############
 
     # Call the update function when the matrix_Stoichio is modified
-    @Stoichio_matrix.setter
-    def Stoichio_matrix(self, new_df):
-        self._Stoichio_matrix = new_df
-        self._update_network()
+    @Stoichio_matrix_pd.setter
+    def Stoichio_matrix_pd(self, new_df) :
+
+        # If the input matrix is a dataframe
+        if isinstance(new_df, pd.DataFrame) :
+            # If the previous one and the new one have the same shape, we don't update the model
+            if new_df.shape == self.__N.shape :
+                self.__Stoichio_matrix_pd = new_df
+            # Else we update the model
+            else :
+                self.__Stoichio_matrix_pd = new_df
+                self._update_network()
+
+        # If the update matrix is a numpy array
+        elif isinstance(new_df, np.ndarray) :
+            if new_df.shape == self.Stoichio_matrix_np.shape :
+                self.Stoichio_matrix_pd.values = new_df
+            else :
+                raise ValueError(f"In the case of the update of the stoichiometric matrix by a numpy matrix, please be sure that the shape are the same !\n")
+        
+        # Else, the type is wrong
+        else :
+            raise TypeError(f"Please, to update the whole stoichiometric matrix, use a Pandas dataframe or a Numpy array with the same shape !\n")
+
 
     def reset(self):
         ### Description of the function
         """
         Function to reset the model
         """
-        self.Stoichio_matrix = pd.DataFrame()
+        self.Stoichio_matrix_pd = pd.DataFrame()
         self.parameters.df.reset_index(inplace=True)
         self.enzymes.df.reset_index(inplace=True)
         self.elasticity.s.df.reset_index(inplace=True)
@@ -721,21 +742,21 @@ class MODEL:
         if self.activate_update :
             # Deal with the reactions
             # Loop on every reaction of the stoichiometry matrix
-            for reaction in self.Stoichio_matrix.columns:
+            for reaction in self.Stoichio_matrix_pd.columns:
                 # Creation of a dictionnary that will contain every metabolite (as keys) and their stoichiometries coeff (as values)
                 dict_stochio = {}
 
                 # We also add the stochiometric coefficent to the dataframe of reaction
-                for meta in self.Stoichio_matrix.index:
-                    if self.Stoichio_matrix.at[meta, reaction] != 0:
-                        dict_stochio[meta] = self.Stoichio_matrix.loc[meta, reaction]
+                for meta in self.Stoichio_matrix_pd.index:
+                    if self.Stoichio_matrix_pd.at[meta, reaction] != 0:
+                        dict_stochio[meta] = self.Stoichio_matrix_pd.loc[meta, reaction]
 
                 # Then we add the reaction to the reactions Dataframe
                 self.reactions._update(name=reaction, metabolites=dict_stochio)
 
             # Deal with the metabolites
 
-            for meta in self.Stoichio_matrix.index:
+            for meta in self.Stoichio_matrix_pd.index:
                 self.metabolites._update(meta)
 
             # Reset the value of the cache data
@@ -1136,9 +1157,9 @@ class MODEL:
         # local function to extract the mean from the model by the name of the element fo the model
         def mean_in_the_model(name):
             if name in self.metabolites.df.index:
-                return self.metabolites.df.at[name, "Concentration (mmol/gDW)"]
+                return self.metabolites.df.at[name, "Concentration"]
             elif name in self.reactions.df.index:
-                return self.reactions.df.at[name, "Flux (mmol/gDW/h)"]
+                return self.reactions.df.at[name, "Flux"]
             elif name in self.parameters.df.index:
                 return self.parameters.df.at[name, "Mean values"]
             else:
@@ -1313,9 +1334,9 @@ class MODEL:
         # local function to extract the mean from the model by the name of the element fo the model
         def mean_in_the_model(name):
             if name in self.metabolites.df.index:
-                return self.metabolites.df.at[name, "Concentration (mmol/gDW)"]
+                return self.metabolites.df.at[name, "Concentration"]
             elif name in self.reactions.df.index:
-                return self.reactions.df.at[name, "Flux (mmol/gDW/h)"]
+                return self.reactions.df.at[name, "Flux"]
             elif name in self.parameters.df.index:
                 return self.parameters.df.at[name, "Mean values"]
             else:
@@ -2081,14 +2102,25 @@ class MODEL:
 
         # For every metabolite of the model
         for meta in self.metabolites.df.index :
-            dict_value[meta] = self.metabolites.df.at[meta, "Concentration (mmol/gDW)"]
+            dict_value[meta] = self.metabolites.df.at[meta, "Concentration"]
+
+        builder.metabolite_scale = [
+        { 'type': 'value', 'value': 0.0, 'color': 'rgba(  0, 0, 100, 0.0)', 'size': 10},
+        { 'type': 'max'  ,               'color': 'rgba(  0, 0, 100, 1.0)', 'size': 40}
+        ]
+
+        builder.reaction_scale = [
+        { 'type': 'value', 'value': 0.0, 'color': 'rgba(  0, 0,   0, 1.0)', 'size':  0},
+        { 'type': 'max'  ,               'color': 'rgba(  0, 0, 100, 1.0)', 'size': 30}
+        ]
+
 
         # Implementation of the value to the escher builder
         builder.metabolite_data = dict_value
 
         dict_value = {}
         for react in self.reactions.df.index :
-            dict_value[react] = self.reactions.df.at[react, "Flux (mmol/gDW/h)"]
+            dict_value[react] = self.reactions.df.at[react, "Flux"]
 
         builder.reaction_data = dict_value
 
@@ -2101,6 +2133,56 @@ class MODEL:
 
         from IPython.display import display
         display(builder)
+
+
+    ################################################################################
+    #                                                                              #
+    # cost # fitness # robustness # real data # objectif function  #  evaluation   #
+    #                                                                              #
+    ################################################################################
+    #                                                                              #
+    #                      MODEL FITTING / ROBUSTNESS & COST                       #
+    #                                                                              #
+    ################################################################################
+
+    def test_real_data(self) :
+        for key in self.real_data.keys() :
+            if key == "Flux" :
+                self.real_data[key] = pd.DataFrame(index=self.reactions.df.index)
+                self.real_data[key]["Flux"] = self.reactions.df["Flux"]
+
+                error = np.random.uniform(-0.1, 0.1, len(self.reactions.df.index))
+                for i,reaction in enumerate(self.reactions.df.index) :
+                    self.real_data[key].at[reaction, "Flux"] = self.real_data[key].at[reaction, "Flux"] + error[i]
+
+            elif key == "Concentration" :
+                self.real_data[key] = pd.DataFrame(index=self.metabolites.df.index)
+                self.real_data[key]["Concentration"] = self.metabolites.df["Concentration"]
+
+                error = np.random.uniform(-0.1, 0.1, len(self.metabolites.df.index))
+                for i,reaction in enumerate(self.metabolites.df.index) :
+                    self.real_data[key].at[reaction, "Concentration"] = self.real_data[key].at[reaction, "Concentration"] + error[i]
+
+            elif key == "Covariance" :
+                self.real_data[key] = self.covariance.copy()
+
+                error = np.random.uniform(-0.01, 0.01, len(self.covariance.index)*len(self.covariance.columns))
+
+                for i, index in enumerate(self.covariance.index) :
+                    for j,column in enumerate(self.covariance.columns) :
+                        self.real_data[key].at[index, column] = self.real_data[key].at[index, column] + error[i*len(self.covariance.index) + j]
+
+            
+    def similarity(self) :
+
+        sim_react = np.linalg.norm( self.real_data["Flux"]['Flux'].values - self.reactions.df['Flux'].values )
+
+        sim_meta = np.linalg.norm( self.real_data["Concentration"]['Concentration'].values - self.metabolites.df['Concentration'].values )
+        
+        sim_tot = sim_react + sim_meta
+
+        return sim_tot
+
 
 
     ################################################################################
@@ -2127,7 +2209,7 @@ class MODEL:
 
         """
         if n <= 1:
-            raise TypeError("Please enter an integer >= 2")
+            raise TypeError("Please enter an integer >= 2 !\n")
 
         else:
             # reinitialisation of the data
@@ -2146,13 +2228,14 @@ class MODEL:
             noms_colonnes = [f"reaction_{i}" for i in range(n - 1)]
 
             # Attribution of the new stoichiometic matrix
-            self.Stoichio_matrix = pd.DataFrame(matrix, index=noms_lignes, columns=noms_colonnes)
+            self.Stoichio_matrix_pd = pd.DataFrame(matrix, index=noms_lignes, columns=noms_colonnes)
 
             self.metabolites.df.loc[f"meta_{0}", "External"] = True
             self.metabolites.df.loc[f"meta_{n-1}", "External"] = True
 
-            for reaction in self.Stoichio_matrix.columns:
+            for reaction in self.Stoichio_matrix_pd.columns:
                 self.elasticity.p.df.at[reaction, "Temperature"] = 0
+
 
             self._update_elasticity()
 
@@ -2177,7 +2260,7 @@ class MODEL:
         for ligne in df.to_numpy():
             N.loc[ligne[0]] = ligne[1:]
 
-        self._Stoichio_matrix = N
+        self.Stoichio_matrix_np = N
 
         self._update_network()
 
@@ -2293,7 +2376,7 @@ class MODEL:
 
                 N.fillna(0, inplace=True)
 
-            self.Stoichio_matrix = N
+            self.Stoichio_matrix_pd = N
 
             # Set the metabolite as external
             for specie in model.species:
@@ -2320,7 +2403,7 @@ class MODEL:
                 for i in range(len(list_metabolites)):
                     if list_metabolites[i] in self.metabolites.df.index:
                         # Attribution of the concentrations to the dataframe
-                        self.metabolites.df.at[list_metabolites[i], "Concentration (mmol/gDW)"] = float(list_concentrations[i])
+                        self.metabolites.df.at[list_metabolites[i], "Concentration"] = float(list_concentrations[i])
                     else:
                         print(f"Warning : The metabolite {list_metabolites[i]} is not in the SBML file of the metabolic network !")
 
@@ -2333,7 +2416,7 @@ class MODEL:
                 for i in range(len(list_reactions)):
                     if list_reactions[i] in self.reactions.df.index:
                         # Attribution of the flux to the dataframe
-                        self.reactions.df.at[list_reactions[i], "Flux (mmol/gDW/h)"] = float(list_flux[i])
+                        self.reactions.df.at[list_reactions[i], "Flux"] = float(list_flux[i])
                     else:
                         print(
                             f"Warning : The reaction {list_reactions[i]} is not in the SBML file of the metabolic network !"
@@ -2428,10 +2511,10 @@ class MODEL:
         for meta in self.metabolites.df.index :
             # Creation of a species in the model
             s = model.createSpecies()
-            check(s,                                                                                   'create species ' + meta)
-            check(s.setId("ID_"+meta),                                                                'set species '+ meta + ' ID')
-            check(s.setName(meta),                                                                'set species '+ meta + ' name')
-            check(s.setInitialAmount(self.metabolites.df.at[meta, "Concentration (mmol/gDW)"]),     'set initial amount for ' + meta)
+            check(s,                                                                                'create species ' + meta)
+            check(s.setId("ID_"+meta),                                                              'set species '+ meta + ' ID')
+            check(s.setName(meta),                                                                  'set species '+ meta + ' name')
+            check(s.setInitialAmount(self.metabolites.df.at[meta, "Concentration"]),                'set initial amount for ' + meta)
             check(s.setSubstanceUnits('mole'),                                                      'set substance units for ' + meta)
             check(s.setBoundaryCondition(bool(self.metabolites.df.at[meta, "External"])),           'set "boundaryCondition" on ' + meta)
             dict_meta[meta] = s
@@ -2484,7 +2567,7 @@ class MODEL:
 
             parameter_flux = kinetic_law.createParameter()
             parameter_flux.setId("FLUX_VALUE")
-            parameter_flux.setValue(self.reactions.df.at[react, "Flux (mmol/gDW/h)"])
+            parameter_flux.setValue(self.reactions.df.at[react, "Flux"])
             parameter_flux.setUnits("mmol_per_gDW_per_hr")
 
 
@@ -2713,19 +2796,19 @@ class MODEL:
         """
         # Check the reaction
         unused_reactions = []
-        for react in self._Stoichio_matrix.columns.to_list():
+        for react in self.Stoichio_matrix_np.columns.to_list():
             counter = 0
-            for meta in self._Stoichio_matrix.index.to_list():
-                counter += np.abs(self._Stoichio_matrix.loc[meta, react])
+            for meta in self.Stoichio_matrix_np.index.to_list():
+                counter += np.abs(self.Stoichio_matrix_np.loc[meta, react])
             if counter == 0:
                 unused_reactions.append(react)
 
         # Check the metabolite
         unused_metabolites = []
-        for meta in self._Stoichio_matrix.index.to_list():
+        for meta in self.Stoichio_matrix_np.index.to_list():
             counter = 0
-            for react in self._Stoichio_matrix.columns.to_list():
-                counter += np.abs(self._Stoichio_matrix.loc[meta, react])
+            for react in self.Stoichio_matrix_np.columns.to_list():
+                counter += np.abs(self.Stoichio_matrix_np.loc[meta, react])
             if counter == 0:
                 unused_metabolites.append(meta)
 
@@ -2767,21 +2850,21 @@ class MODEL:
         """
         dataframe_reaction = pd.DataFrame(
             index=self.reactions.df.index,
-            columns=["Driving force", "Flux (mmol/gDW/h)", "Consistency"],
+            columns=["Driving force", "Flux", "Consistency"],
         )
 
         vector_k_eq = self.reactions.df["Equilibrium constant"]
-        vector_c = self.metabolites.df["Concentration (mmol/gDW)"]
+        vector_c = self.metabolites.df["Concentration"]
 
-        vector_driving_force = np.log(vector_k_eq) - np.dot(self.__Stoichio_matrix.T, np.log(vector_c))
+        vector_driving_force = np.log(vector_k_eq) - np.dot(self.Stoichio_matrix_np.T, np.log(vector_c))
         dataframe_reaction["Driving force"] = vector_driving_force
-        dataframe_reaction["Flux (mmol/gDW/h)"] = self.reactions.df["Flux (mmol/gDW/h)"]
+        dataframe_reaction["Flux"] = self.reactions.df["Flux"]
         dataframe_reaction["Consistency"] = False
 
         for index in dataframe_reaction.index:
             if (
                 dataframe_reaction.at[index, "Driving force"]
-                * dataframe_reaction.at[index, "Flux (mmol/gDW/h)"]
+                * dataframe_reaction.at[index, "Flux"]
                 >= 0
             ):
                 dataframe_reaction.at[index, "Consistency"] = True
@@ -2886,7 +2969,7 @@ class MODEL:
                 raise NameError(f'The metabolite name "{name}" is not in the metabolites dataframe')
 
             if type(mean) == bool:
-                mean = self.metabolites.at[name, "Concentration (mmol/gDW)"]
+                mean = self.metabolites.at[name, "Concentration"]
 
         # Case where the flux is sampled
         elif type_variable == "flux" or type_variable == "reaction":
@@ -2894,7 +2977,7 @@ class MODEL:
                 raise NameError(f'The flux name "{name}" is not in the reactions dataframe')
 
             if type(mean) == bool:
-                mean = self.reactions.at[name, "Flux (mmol/gDW/h)"]
+                mean = self.reactions.at[name, "Flux"]
 
         # Case where a enzyme concentration/activity is sampled
         elif type_variable == "enzyme":
@@ -3020,7 +3103,7 @@ class MODEL:
                     )
 
                 elif self.data_sampling.at[index, "Type"].lower() == "metabolite":
-                    self.metabolites.df.at[self.data_sampling.at[index, "Name"], "Concentration (mmol/gDW)"] = (
+                    self.metabolites.df.at[self.data_sampling.at[index, "Name"], "Concentration"] = (
                         value_rand(
                             self.data_sampling.at[index, "Distribution"],
                             self.data_sampling.at[index, "Standard deviation"],
@@ -3029,7 +3112,7 @@ class MODEL:
                     )
 
                 elif self.data_sampling.at[index, "Type"].lower() == "flux":
-                    self.metabolites.df.at[self.data_sampling.at[index, "Name"], "Flux (mmol/gDW/h)"] = (
+                    self.metabolites.df.at[self.data_sampling.at[index, "Name"], "Flux"] = (
                         value_rand(
                             self.data_sampling.at[index, "Distribution"],
                             self.data_sampling.at[index, "Standard deviation"],
@@ -3067,7 +3150,7 @@ class MODEL:
 
         self.__original_atributes = {}
 
-        self.__original_atributes["stoichiometry"] = copy.deepcopy(self.Stoichio_matrix)
+        self.__original_atributes["stoichiometry"] = copy.deepcopy(self.Stoichio_matrix_pd)
         self.__original_atributes["metabolites"] = copy.deepcopy(self.metabolites.df)
         self.__original_atributes["reactions"] = copy.deepcopy(self.reactions.df)
         self.__original_atributes["parameters"] = copy.deepcopy(self.parameters.df)
@@ -3078,7 +3161,7 @@ class MODEL:
     #############################################################################
     ################   function to upload the saved state   #####################
     def __upload_state(self):
-        self.Stoichio_matrix = self.__original_atributes["stoichiometry"]
+        self.Stoichio_matrix_pd = self.__original_atributes["stoichiometry"]
         self.metabolites.df = self.__original_atributes["metabolites"]
         self.reactions.df = self.__original_atributes["reactions"]
         self.parameters.df = self.__original_atributes["parameters"]

@@ -15,7 +15,7 @@ class Reaction_class:
         self.__class_MODEL_instance = class_MODEL_instance
 
         self.df = pd.DataFrame(
-            columns=["Metabolites", "Equilibrium constant", "Reversible", "Flux (mmol/gDW/h)"]
+            columns=["Metabolites", "Equilibrium constant", "Reversible", "Flux", "Unit"]
         )
 
     ################################################################################
@@ -61,7 +61,8 @@ class Reaction_class:
                     "Metabolites",
                     "Equilibrium constant",
                     "Reversible",
-                    "Flux (mmol/gDW/h)",
+                    "Flux",
+                    "Unit"
                 ]
             )
 
@@ -72,16 +73,16 @@ class Reaction_class:
             self.df.loc[name] = [metabolites, k_eq, reversible, flux]
 
             # Add a null columns to the stoichio matrix N
-            if name not in self.__class_MODEL_instance.Stoichio_matrix.columns:
-                self.__class_MODEL_instance.Stoichio_matrix[name] = 0.0
+            if name not in self.__class_MODEL_instance.Stoichio_matrix_pd.columns:
+                self.__class_MODEL_instance.Stoichio_matrix_pd[name] = 0.0
 
             for meta in list(metabolites.keys()):
-                if meta not in self.__class_MODEL_instance.Stoichio_matrix.index:
+                if meta not in self.__class_MODEL_instance.Stoichio_matrix_pd.index:
                     # If the metabolite is not in the model, we add it
                     self.__class_MODEL_instance.metabolites.add(meta)
 
                 # Then we add the correct stoichiometric coefficients
-                self.__class_MODEL_instance.Stoichio_matrix.at[meta, name] = self.df.at[
+                self.__class_MODEL_instance.Stoichio_matrix_pd.at[meta, name] = self.df.at[
                     name, "Metabolites"
                 ][meta]
 
@@ -92,7 +93,7 @@ class Reaction_class:
     #################################################################################
     #########           Fonction to change a reaction                      ##########
 
-    def change(self, name: str, metabolites=None, k_eq=None, reversible=True, flux=None):
+    def change(self, name: str, metabolites=None, k_eq=None, reversible=True, flux=None, unit = "mmol/gDW/h"):
         ### Description of the fonction
         """
         Fonction to change a reaction properties in the model
@@ -126,7 +127,8 @@ class Reaction_class:
             if reversible != None:
                 self.df.at[name, "Reversible"] = reversible
             if flux != None:
-                self.df.at[name, "Flux (mmol/gDW/h)"] = flux
+                self.df.at[name, "Flux"] = flux
+            self.df.at[name, "Unit"] = unit
 
     #################################################################################
     #########           Fonction to remove a reaction                      ##########
@@ -151,10 +153,10 @@ class Reaction_class:
             self.df.drop(name, inplace=True)
 
             # For a reaction in the stoichiometric matrix
-            for reaction in self.__class_MODEL_instance.Stoichio_matrix.columns:
+            for reaction in self.__class_MODEL_instance.Stoichio_matrix_pd.columns:
                 # If the the reaction is not in the modified reaction dataframe => it was deleted
                 if reaction not in self.df.index:
-                    self.__class_MODEL_instance.Stoichio_matrix.drop(
+                    self.__class_MODEL_instance.Stoichio_matrix_pd.drop(
                         reaction, axis=1, inplace=True
                     )
 
@@ -163,7 +165,7 @@ class Reaction_class:
 
     #################################################################################
     #########           Fonction to add a reaction                         ##########
-    def _update(self, name: str, metabolites={}, k_eq=1.0, reversible="", flux=1) -> None:
+    def _update(self, name: str, metabolites={}, k_eq=1.0, reversible="", flux=1, unit="mmol/gDW/h") -> None:
         ### Description of the fonction
         """
         Internal function to update the reaction dataframe after a change of the stoichiometric matrix
@@ -184,21 +186,15 @@ class Reaction_class:
         """
         # Look if the reaction class was well intialised
         if not isinstance(self.df, pd.DataFrame):
-            self.df = pd.DataFrame(
-                columns=[
-                    "Metabolites",
-                    "Equilibrium constant",
-                    "Reversible",
-                    "Flux (mmol/gDW/h)",
-                ]
+            self.df = pd.DataFrame(columns=["Metabolites", "Equilibrium constant", "Reversible", "Flux","Unit"]
             )
 
         # Look if the reaction is already in the model
         if name not in self.df.index:
-            self.df.loc[name] = [metabolites, k_eq, reversible, flux]
+            self.df.loc[name] = [metabolites, k_eq, reversible, flux, unit]
 
             # We check the stoichiometric coefficient link to this reaction in order to automatically add them to the matrix
             for meta in list(self.df.loc[name, "Metabolites"].keys()):
-                if meta not in self.__class_MODEL_instance.Stoichio_matrix.index:
+                if meta not in self.__class_MODEL_instance.Stoichio_matrix_pd.index:
                     # If the metabolite is not in the model, we add it
                     self.__class_MODEL_instance.metabolites._update(meta)
