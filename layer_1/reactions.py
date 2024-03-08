@@ -21,7 +21,8 @@ class Reaction_class:
     ################################################################################
     #########           Return the Dataframe of the reactions             ##########
     def __repr__(self) -> str:
-        return str(self.df)
+        return self.df.to_string()
+    
 
     ################################################################################
     #########        Fonction to return the number of reaction            ##########
@@ -31,7 +32,7 @@ class Reaction_class:
 
     #################################################################################
     #########           Fonction to add a reaction                         ##########
-    def add(self, name: str, metabolites={}, k_eq=1.0, reversible=True, flux=1.0) -> None:
+    def add(self, name: str, metabolites={}, k_eq=1.0, reversible=True, flux=1.0, unit = "mmol/gDW/h") -> None:
         ### Description of the fonction
         """
         Fonction to add a reaction to the model\n
@@ -62,33 +63,31 @@ class Reaction_class:
                     "Equilibrium constant",
                     "Reversible",
                     "Flux",
-                    "Unit"
-                ]
-            )
+                    "Unit"])
 
 
         # Else, the reaction is add to the model by an add to the DataFrame
         else:
-            # Add the reaction to the reactions dataframe
-            self.df.loc[name] = [metabolites, k_eq, reversible, flux]
+            if name in self.df.index :
+                self.change(name, metabolites, k_eq, reversible, flux, unit)
+            else : 
+                # Add the reaction to the reactions dataframe
+                self.df.loc[name] = [metabolites, k_eq, reversible, flux, unit]
 
-            # Add a null columns to the stoichio matrix N
-            if name not in self.__class_MODEL_instance.Stoichio_matrix_pd.columns:
-                self.__class_MODEL_instance.Stoichio_matrix_pd[name] = 0.0
+                # Add a null columns to the stoichio matrix N
+                if name not in self.__class_MODEL_instance.Stoichio_matrix_pd.columns:
+                    self.__class_MODEL_instance.Stoichio_matrix_pd[name] = 0.0
 
-            for meta in list(metabolites.keys()):
-                if meta not in self.__class_MODEL_instance.Stoichio_matrix_pd.index:
-                    # If the metabolite is not in the model, we add it
-                    self.__class_MODEL_instance.metabolites.add(meta)
+                for meta in list(metabolites.keys()):
+                    if meta not in self.__class_MODEL_instance.Stoichio_matrix_pd.index:
+                        # If the metabolite is not in the model, we add it
+                        self.__class_MODEL_instance.metabolites.add(meta)
 
-                # Then we add the correct stoichiometric coefficients
-                self.__class_MODEL_instance.Stoichio_matrix_pd.at[meta, name] = self.df.at[
-                    name, "Metabolites"
-                ][meta]
+                    # Then we add the correct stoichiometric coefficients
+                    self.__class_MODEL_instance.Stoichio_matrix_pd.at[meta, name] = self.df.at[name, "Metabolites"][meta]
 
-            # Updating the network
-            self.__class_MODEL_instance._update_network()
-            self.__class_MODEL_instance._update_elasticity()
+                # Updating the elasticity matrix
+                self.__class_MODEL_instance._update_elasticity()
 
     #################################################################################
     #########           Fonction to change a reaction                      ##########
@@ -120,8 +119,19 @@ class Reaction_class:
             raise NameError(f"The name '{name}' is not in the reactions dataframe")
 
         else:
-            if metabolites != None:
+            # First we look the metabolites input
+            if isinstance(metabolites, dict):
                 self.df.at[name, "Metabolites"] = metabolites
+                self.__class_MODEL_instance.Stoichio_matrix_pd[name] = 0.0
+
+                for meta in list(metabolites.keys()):
+                    if meta not in self.__class_MODEL_instance.Stoichio_matrix_pd.index:
+                        # If the metabolite is not in the model, we add it
+                        self.__class_MODEL_instance.metabolites.add(meta)
+                
+                    # Then we add the correct stoichiometric coefficients
+                    self.__class_MODEL_instance.Stoichio_matrix_pd.at[meta, name] = self.df.at[name, "Metabolites"][meta]
+
             if k_eq != None:
                 self.df.at[name, "Equilibrium constant"] = k_eq
             if reversible != None:
@@ -146,7 +156,7 @@ class Reaction_class:
 
         # Look if the reaction isn't in the model
         if name not in self.df.index:
-            print("Please enter a valide name \n")
+            True
 
         # Else, the reaction is remove from the model
         else:
@@ -156,10 +166,10 @@ class Reaction_class:
             for reaction in self.__class_MODEL_instance.Stoichio_matrix_pd.columns:
                 # If the the reaction is not in the modified reaction dataframe => it was deleted
                 if reaction not in self.df.index:
-                    self.__class_MODEL_instance.Stoichio_matrix_pd.drop(
-                        reaction, axis=1, inplace=True
-                    )
+                    self.__class_MODEL_instance.Stoichio_matrix_pd.drop(reaction, axis=1, inplace=True)
 
+            self.__class_MODEL_instance.elasticity.p.df.drop(index=name, inplace=True)
+            self.__class_MODEL_instance.elasticity.s.df.drop(index=name, inplace=True)
             # Updating the network
             self.__class_MODEL_instance._update_network
 

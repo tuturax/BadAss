@@ -49,9 +49,7 @@ class Operon_class:
 
         # Look if the operon is already in the model
         if name in self.df.index.to_list():
-            raise NameError(
-                f"The input operon {name} is already in the operon dataframe !\n"
-            )
+            raise NameError(f"The input operon {name} is already in the operon dataframe !\n")
 
         # We look for every enzyme linked to this operon
         for enzyme in enzymes_linked:

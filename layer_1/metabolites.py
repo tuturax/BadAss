@@ -32,7 +32,7 @@ class Metabolite_class:
 
     #################################################################################
     #########           Fonction to add a metabolite                         ##########
-    def add(self, name: str, external=False, concentration=1.0):
+    def add(self, name: str, external=False, concentration=1.0, unit = "mmol/gDW"):
         ### Description of the fonction
         """
         Fonction to add a metabolite to the model\n
@@ -47,7 +47,11 @@ class Metabolite_class:
             is the metabolite external ?\n
         
         concentration : float
-            Concentration of the metabolite at the reference state
+            Concentration of the metabolite at the reference state\n
+        
+        unit          : str
+            Unit of the concentration\n
+
 
         """
         # Look if the metabolite class was well intialised
@@ -59,34 +63,35 @@ class Metabolite_class:
     
         elif not isinstance(concentration, (int,float)) :
             raise TypeError(f"The input argument 'concentration' must be a number, not a {type(concentration)}")
+        
+        elif not isinstance(unit, str) :
+            raise TypeError(f"The input argument 'unit' must be a string, not a {type(unit)}")
+
 
         # Else, the metabolite is add to the model by an add to the DataFrame
         else:
-            self.df.loc[name] = [external, concentration]
+            if name in self.df.index :
+                self.change(name, external, concentration, unit)
+            else : 
+                self.df.loc[name] = [external, concentration, unit]
 
-            # If there is no reaction in the columns of the soichio metric matrix, we keep in memeory the metabolite
-            if self.__class_MODEL_instance.Stoichio_matrix_pd.columns.size == 0:
-                self.__cache_meta.append(name)
-                print(
-                    "Don't worry, the metabolite will be add after the add of the 1st reaction"
-                )
+                # If there is no reaction in the columns of the soichio metric matrix, we keep in memeory the metabolite
+                if self.__class_MODEL_instance.Stoichio_matrix_pd.columns.size == 0:
+                    self.__cache_meta.append(name)
+                    print("Don't worry, the metabolite will be add after the add of the 1st reaction")
 
-            # Else, we add every metabolite that we keeped into memory to the stoichiometrix matrix
-            else:
-                self.__cache_meta.append(name)
-                for meta in self.__cache_meta:
-                    if meta not in self.__class_MODEL_instance.Stoichio_matrix_pd.index:
-                        self.__class_MODEL_instance.Stoichio_matrix_pd.loc[meta] = 0.0
+                # Else, we add every metabolite that we keeped into memory to the stoichiometrix matrix
+                else:
+                    self.__cache_meta.append(name)
+                    for meta in self.__cache_meta:
+                        if meta not in self.__class_MODEL_instance.Stoichio_matrix_pd.index:
+                            self.__class_MODEL_instance.Stoichio_matrix_pd.loc[meta] = 0.0
 
-                self.__cache_meta = []
-
-            # Updating the network
-            # self.__class_MODEL_instance._update_network()
-            self.__class_MODEL_instance._update_elasticity()
+                    self.__cache_meta = []
 
     #################################################################################
     #########           Fonction to change a metabolite                    ##########
-    def change(self, name: str, external=None, concentration=None, unit = "mmol/gDW"):
+    def change(self, name: str, external=None, concentration=None, unit=None):
         ### Description of the fonction
         """
         Fonction to change a metabolite properties in the model
@@ -116,7 +121,7 @@ class Metabolite_class:
                 else:
                     # If it was internal and become external => we remove it from the elasticity matrix
                     self.df.at[name, "External"] = external
-                    self.__class_MODEL_instance._update_elasticity()
+                    #self.__class_MODEL_instance._update_elasticity()
 
             if concentration != None:
                 if isinstance(concentration, (int, float, complex)):
@@ -125,12 +130,14 @@ class Metabolite_class:
                             f"The value of the input '{concentration}' must be greater than 0 !"
                         )
                     else:
-                        self.df.at[name, "Concentration", unit] = concentration
-
+                        self.df.at[name, "Concentration"] = concentration
                 else:
                     raise TypeError(
                         f"The input variable '{concentration}' is a type '{type(concentration)}', a value is expected for the argument 'concentration' !"
                     )
+            
+            if isinstance(unit, str) :
+                self.df.at[name, "Unit"] = unit
 
     #################################################################################
     #########           Fonction to remove a metabolite                    ##########
@@ -149,36 +156,21 @@ class Metabolite_class:
         # Look if the metabolite is in the model
         if name not in self.df.index:
             raise NameError(
-                f"Please enter a valide name, {name} isn't in the model ! \n"
-            )
+                f"Please enter a valide name, {name} isn't in the model ! \n")
 
-        else:
+        else :
             # Else, the metabolite is remove from the dataframe
             self.df.drop(name, inplace=True)
 
-            for meta in self.__class_MODEL_instance.Stoichio_matrix_pd.index:
-                # If the the meta is not in the modified metabolite dataframe => it was deleted
-                if meta not in self.df.index:
-                    self.__class_MODEL_instance.Stoichio_matrix_pd.drop(
-                        meta, axis=0, inplace=True
-                    )
+            # Also from the stoichiometric matrix
+            self.__class_MODEL_instance.N.drop(name, axis=0, inplace=True)
 
             # And from every mention of it in the reaction dataframe
             for reaction in self.__class_MODEL_instance.reactions.df.index:
-                keys_to_remove = [
-                    cle
-                    for cle in self.__class_MODEL_instance.reactions.df.loc[
-                        reaction, "Metabolites"
-                    ].keys()
-                    if name in cle
-                ]
-                for key_to_remove in keys_to_remove:
-                    self.__class_MODEL_instance.reactions.df.loc[
-                        reaction, "Metabolites"
-                    ].pop(key_to_remove)
+                self.__class_MODEL_instance.reactions.df.loc[reaction, "Metabolites"].pop(name, None)
 
             # Updating the network
-            self.__class_MODEL_instance._update_network
+            #self.__class_MODEL_instance._update_network
 
             # Remove this metabolite from the elasticity matrix E_s
             self.__class_MODEL_instance._update_elasticity()

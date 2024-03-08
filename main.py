@@ -16,9 +16,13 @@ INRAE, MaIAGE
 # Computation module
 import numpy as np
 import sympy
+
 from scipy.linalg import expm
+from scipy.sparse import csr_matrix
+from scipy.sparse import eye
 import random
 import pandas as pd
+import time
 
 # Model module
 import libsbml
@@ -146,7 +150,8 @@ class MODEL:
 
     @property
     def N_without_ext(self) -> pd.DataFrame :
-        N = self.N
+        N = self.N.copy()
+
         # We check if every metabolite is external
         for meta in self.Stoichio_matrix_pd.index:
             if self.metabolites.df.at[meta, "External"] == True:
@@ -269,29 +274,31 @@ class MODEL:
     ###################
     # Jacobian
     @property  # Core
-    def __Jacobian(self):
+    def __Jacobian(self) :
         self._update_elasticity()
         if self.__cache_Jacobian is None:
             # Reset of the cache value of the inversed matrix of J
             self.__cache_Reversed_Jacobian = None
-            # Compute the J matrix
+
+            # Compute of the J matrix
             L, Nr = self.Link_matrix
-            self.__cache_Jacobian = np.dot(
-                Nr.to_numpy(dtype="float64"),
-                np.dot(self.elasticity.s.df.to_numpy(dtype="float64"), L),
-            )
+            L = csr_matrix(L)
+            Nr = csr_matrix(Nr.to_numpy(dtype="float64"))
+            E_s = csr_matrix(self.elasticity.s.df.to_numpy(dtype="float64"))
+            
+            self.__cache_Jacobian = Nr.dot(E_s.dot(L))
+
             # Case of a frequency response
             if self.frequency_omega != 0:
-                self.__cache_Jacobian = (
-                    self.__cache_Jacobian
-                    - np.identity(len(self.__cache_Jacobian), dtype=complex) * self.frequency_omega * 1j
-                )
-        return self.__cache_Jacobian
+                self.__cache_Jacobian = self.__cache_Jacobian - eye(self.__cache_Jacobian.shape[0], dtype=complex) * self.frequency_omega * 1j
+        
+        return self.__cache_Jacobian.toarray()
 
     @property  # Displayed
     def Jacobian(self):
         Nr = self.Link_matrix[1]
-        return pd.DataFrame(self.__Jacobian, index=Nr.index, columns=Nr.index)
+        return pd.DataFrame( self.__Jacobian, index=Nr.index, columns=Nr.index)
+
 
     #########################
     # Inverse of the Jacobian
@@ -703,25 +710,31 @@ class MODEL:
 
         # If the input matrix is a dataframe
         if isinstance(new_df, pd.DataFrame) :
+            
             # If the previous one and the new one have the same shape, we don't update the model
             if new_df.shape == self.__N.shape :
                 self.__Stoichio_matrix_pd = new_df
             # Else we update the model
             else :
+                # First we remove all the previous reactions
+                for reaction in self.reactions.df :
+                    self.reactions.remove(reaction)
+
                 self.__Stoichio_matrix_pd = new_df
+
                 self._update_network()
 
         # If the update matrix is a numpy array
         elif isinstance(new_df, np.ndarray) :
             if new_df.shape == self.Stoichio_matrix_np.shape :
-                self.Stoichio_matrix_pd.values = new_df
+                self.__Stoichio_matrix_pd.values = new_df
             else :
                 raise ValueError(f"In the case of the update of the stoichiometric matrix by a numpy matrix, please be sure that the shape are the same !\n")
         
         # Else, the type is wrong
         else :
             raise TypeError(f"Please, to update the whole stoichiometric matrix, use a Pandas dataframe or a Numpy array with the same shape !\n")
-
+        
 
     def reset(self):
         ### Description of the function
@@ -740,6 +753,12 @@ class MODEL:
         Fonction to update the dataframes after atribuated a new values to the stoichio matrix
         """
         if self.activate_update :
+            self.metabolites.__init__(self)
+            self.reactions.__init__(self)
+            # Deal with the metabolites
+            for meta in self.Stoichio_matrix_pd.index:
+                self.metabolites.add(meta)
+
             # Deal with the reactions
             # Loop on every reaction of the stoichiometry matrix
             for reaction in self.Stoichio_matrix_pd.columns:
@@ -752,12 +771,7 @@ class MODEL:
                         dict_stochio[meta] = self.Stoichio_matrix_pd.loc[meta, reaction]
 
                 # Then we add the reaction to the reactions Dataframe
-                self.reactions._update(name=reaction, metabolites=dict_stochio)
-
-            # Deal with the metabolites
-
-            for meta in self.Stoichio_matrix_pd.index:
-                self.metabolites._update(meta)
+                self.reactions.add(name=reaction, metabolites=dict_stochio)
 
             # Reset the value of the cache data
             self.__cache_Link_matrix = None
@@ -770,7 +784,7 @@ class MODEL:
     #################################################################################
     ############     Function to the elaticities matrix of the model     ############
         
-    def _update_elasticity(self, session="E_s"):
+    def _update_elasticity(self):
         ### Description of the fonction
         """
         Function to update the elasticities matrices of the model after a direct modification of the stoichiometric matrix
@@ -781,7 +795,12 @@ class MODEL:
             ###
             # First we check the metabolite
             # For every metabolite in the stoichio matrix (without the external one, they are in the parameter section) :
-            for meta in self.N_without_ext.index:
+            meta_int = []
+            for meta in self.metabolites.df.index :
+                if self.metabolites.df.at[meta, "External"] == False :
+                    meta_int.append(meta)
+
+            for meta in meta_int:
                 # If the metabolilte isn't in the E_s elasticity matrix => we add it to the E_s elasticity matrix
                 if meta not in self.elasticity.s.df.columns:
                     self.elasticity.s.df[meta] = 0
@@ -806,10 +825,10 @@ class MODEL:
             self.elasticity.s.enzyme = pd.DataFrame(0, columns=colonnes, index=index)
             self.elasticity.s.regulation = pd.DataFrame(0, columns=colonnes, index=index)
 
+
+
             ##################################
             # Then we deal with the parameters
-
-
             missing_para = []
 
             # For every parameters
@@ -834,6 +853,7 @@ class MODEL:
                 for reaction in self.reactions.df.index:
                     if reaction not in self.elasticity.p.df.index:
                         self.elasticity.p.df.loc[reaction] = [0 for i in self.elasticity.p.df.columns]
+
 
             self._reset_value()
 
@@ -2170,18 +2190,30 @@ class MODEL:
 
                 for i, index in enumerate(self.covariance.index) :
                     for j,column in enumerate(self.covariance.columns) :
-                        self.real_data[key].at[index, column] = self.real_data[key].at[index, column] + error[i*len(self.covariance.index) + j]
-
+                        self.real_data[key].at[index, column] = self.real_data[key].at[column, index] = self.real_data[key].at[index, column] + error[i*len(self.covariance.index) + j]
             
-    def similarity(self) :
+    def similarity(self, only_Cov = True) :
 
-        sim_react = np.linalg.norm( self.real_data["Flux"]['Flux'].values - self.reactions.df['Flux'].values )
+        diff_cov = self.covariance - self.real_data["Covariance"]
 
-        sim_meta = np.linalg.norm( self.real_data["Concentration"]['Concentration'].values - self.metabolites.df['Concentration'].values )
-        
-        sim_tot = sim_react + sim_meta
+        # L1 is more sensible to the global difference
+        norm_L1 = np.abs(diff_cov).sum().sum()  
+        # L2 is more usefull to focus on magnitude of difference
+        norm_L2 = np.sqrt((diff_cov ** 2).sum().sum())  
 
-        return sim_tot
+        sim_cov = norm_L2
+
+        if only_Cov : 
+            return sim_cov
+
+        else : 
+            sim_react = np.linalg.norm( self.real_data["Flux"]['Flux'].values - self.reactions.df['Flux'].values )
+
+            sim_meta = np.linalg.norm( self.real_data["Concentration"]['Concentration'].values - self.metabolites.df['Concentration'].values )
+            
+            sim_tot = sim_react + sim_meta + sim_cov
+
+            return sim_tot
 
 
 
@@ -2673,8 +2705,12 @@ class MODEL:
         import sbtab
         import re
 
+        start = time.time()
+
         # Reset of the model
         self.reset
+
+        print(f"{np.round(time.time() - start, 5)} s : Time after reset \n")
 
         # Then we desactivate the automatic update of the model
         self.activate_update = False
@@ -2697,6 +2733,8 @@ class MODEL:
         filename = filepath.split('/')[-1]
         St = sbtab.SBtab.read_csv(filepath=filepath, document_name=filename)
 
+        print(f"{np.round(time.time() - start, 5)} s : Time after read of SBTAB doc \n")
+
         # We attribute the list
         for table in St.sbtabs :
             if table.table_id == "Reaction" :
@@ -2714,7 +2752,7 @@ class MODEL:
             elif table.table_id == "EquilibriumConstant" :
                 Equilibrium_const = table.value_rows
 
-
+        print(f"{np.round(time.time() - start, 5)} s : Time after the attribution of the tab to the local variable \n")
         
         # First we add the reactions
         for i, reaction in enumerate(reactions) :
@@ -2760,6 +2798,8 @@ class MODEL:
             
             self.reactions.add(name, dict_meta, k_eq=k_eq, reversible=reversible, flux=rate)
         
+        print(f"{np.round(time.time() - start, 5)} s : Time after attribution of every reactions \n")
+
         # Then we add metabolites
         for meta in metabolites :
             # ID of the metabolite
@@ -2777,11 +2817,12 @@ class MODEL:
             
             self.metabolites.add(name, external, concentration)
 
-
+        print(f"{np.round(time.time() - start, 5)} s : Time after attribution of the metabolite \n")
 
         self.activate_update = True
         self._update_network()
 
+        print(f"{np.round(time.time() - start, 5)} s : Time after the update of the network \n")
             
 
 
@@ -2823,10 +2864,11 @@ class MODEL:
 
         return (unused_reactions, unused_metabolites)
 
+
     #############################################################################
     ##########   Function to check the jacobian of the model   ##################
     @property
-    def check_unstable(self):
+    def check_unstable(self) :
         """
         Function that check if the BadAss model is unstable
         """
@@ -2841,10 +2883,11 @@ class MODEL:
             print("The jacobian matrix have positives eigen values, that could lead to an unstable state")
         return eigen_values
 
+
     #############################################################################
     #########   Function to check the driving forces of the model   #############
     @property
-    def check_driving_forces(self):
+    def check_driving_forces(self) -> pd.DataFrame :
         """
         Function that check if the driving force of reaction and the k_eq have the same sign
         """

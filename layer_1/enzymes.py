@@ -84,10 +84,10 @@ class Enzymes_class:
                 self.__class_MODEL_instance._reset_value()
 
             # Removing every mention of the enzyme in the operon dataframe
-            for operon in self.__class_MODEL_instance.operon.df.index :
-                if name in self.__class_MODEL_instance.operon.df.at[operon, "Enzymes linked"] :
-                    liste_enzym = [x for x in self.__class_MODEL_instance.operon.df.at[operon, "Enzymes linked"] if x != name]
-                    self.__class_MODEL_instance.operon.df.at[operon, "Enzymes linked"] = liste_enzym
+            for operon in self.__class_MODEL_instance.operons.df.index :
+                if name in self.__class_MODEL_instance.operons.df.at[operon, "Enzymes linked"] :
+                    liste_enzym = [x for x in self.__class_MODEL_instance.operons.df.at[operon, "Enzymes linked"] if x != name]
+                    self.__class_MODEL_instance.operons.df.at[operon, "Enzymes linked"] = liste_enzym
                     
 
     #################################################################################
