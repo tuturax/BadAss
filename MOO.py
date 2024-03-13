@@ -4,14 +4,6 @@ Created on Tue Sep 26 08:26:49 2023
 
 Script for the multi-objective optimization of crop allocation in Europe.
 
-Each variable to be optimized is a real in [0, 0.2], describing the percentage
-of land use for the crop. We have one variable per "pixel" (unitary surface) on
-the map.
-
-Objectives:
-    - Maximize mean forecasted amount of soja
-    - Minimize variance in the forecasted amount of soja
-    - Minimize total surface occupied by soja
 
 @author: Alberto
 """
@@ -48,13 +40,15 @@ class Worker(Thread):
         while True:
             # extract arguments and organize them properly
             func, args, kargs = self.tasks.get()
+            
             if self.logger:
                 self.logger.debug('[Thread %d] Args retrieved: "%s"' % (self.id, args))
+            
             new_args = []
+            
             if self.logger:
-                self.logger.debug(
-                    "[Thread %d] Length of args: %d" % (self.id, len(args))
-                )
+                self.logger.debug("[Thread %d] Length of args: %d" % (self.id, len(args)))
+
             for a in args[0]:
                 new_args.append(a)
             new_args.append(self.id)
@@ -174,7 +168,8 @@ def close_logging(logger: logging.Logger):
 
 def observer(population, num_generations, num_evaluations, args):
     """
-    The observer is a classic function for inspyred, that prints out information and/or saves individuals.
+    The observer is a classic function for inspyred, 
+    that prints out information and/or saves individuals. 
     However, it can be easily re-used by other evolutionary approaches.
     """
     logger = args["logger"]
@@ -215,10 +210,10 @@ def observer(population, num_generations, num_evaluations, args):
 
         # create dictionary
         dictionary_df_keys = ["generation"]
+        
         if fitness_names is None:
-            dictionary_df_keys += [
-                "fitness_value_%d" % i for i in range(0, len(best_fitness))
-            ]
+            dictionary_df_keys += ["fitness_value_%d" % i for i in range(0, len(best_fitness))]
+
         else:
             dictionary_df_keys += fitness_names
         dictionary_df_keys += ["gene_%d" % i for i in range(0, len(best_individual))]
@@ -241,55 +236,6 @@ def observer(population, num_generations, num_evaluations, args):
         # conver dictionary to DataFrame, save as CSV
         df = pd.DataFrame.from_dict(dictionary_df)
         df.to_csv(population_file_name, index=False)
-
-    return
-
-
-def fitness_function(individual, args):
-    """
-    This is the fitness function. It should be replaced by the 'true' fitness function to be optimized.
-    """
-
-    # Name
-    my_model = args["my_model"]
-
-    # What we could change ?
-    # Regulation Arrow (boolean)
-    # Concentration of metabolite in the reference state ( discuss about it)
-    # Stauration values
-    # Elasticity
-    my_model.elasticity.p.df = np.array(individual).reshape(args["shape"])
-
-    # What we look at
-    # The D_Fructose_1_6_bisphosphate and AMP
-    # because it was prouved that they are flux sensor for the total carbon flux in the cell
-    fitness_1 = my_model.objective("fdp", "Biomass_Ecoli_core")
-    fitness_2 = my_model.objective("amp", "Biomass_Ecoli_core")
-
-    # Evaluation of the fitness
-    fitness_values = inspyred.ec.emo.Pareto([fitness_1, fitness_2])
-
-    return fitness_values
-
-
-def evaluate_individual(individual, args, index, fitness_list, thread_lock, thread_id):
-    """
-    Wrapper function for individual evaluation, to be run inside a thread.
-    """
-
-    logger = args["logger"]
-
-    logger.debug("[Thread %d] Starting evaluation..." % thread_id)
-
-    # thread_lock is a threading.Lock object used for synchronization and avoiding
-    # writing on the same resource from multiple threads at the same time
-    thread_lock.acquire()
-    fitness_list[index] = fitness_function(
-        individual, args
-    )  # TODO put your evaluation function here, also maybe add logger and thread_id
-    thread_lock.release()
-
-    logger.debug("[Thread %d] Evaluation finished." % thread_id)
 
     return
 
@@ -324,6 +270,48 @@ def multi_thread_evaluator(candidates, args):
     thread_pool.wait_completion()
 
     return fitness_list
+
+
+def evaluate_individual(individual, args, index, fitness_list, thread_lock, thread_id):
+    """
+    Wrapper function for individual evaluation, to be run inside a thread.
+    """
+
+    logger = args["logger"]
+
+    logger.debug("[Thread %d] Starting evaluation..." % thread_id)
+
+    # thread_lock is a threading.Lock object used for synchronization and avoiding
+    # writing on the same resource from multiple threads at the same time
+    thread_lock.acquire()
+
+
+    fitness_list[index] = fitness_function(
+        individual, args
+    )  # TODO put your evaluation function here, also maybe add logger and thread_id
+    
+    thread_lock.release()
+
+    logger.debug("[Thread %d] Evaluation finished." % thread_id)
+
+    return
+
+
+def fitness_function(individual, args):
+    """
+    This is the fitness function. It should be replaced by the 'true' fitness function to be optimized.
+    """
+
+    my_model = args["my_model"]
+    my_model.elasticity.p.df = np.array(individual).reshape(args["shape"])
+    fitness_1 = my_model.similarity()
+    fitness_2 = my_model.similarity()
+
+    
+
+    fitness_values = inspyred.ec.emo.Pareto([fitness_1, fitness_2])
+
+    return fitness_values
 
 
 def numpy_best_archiver(random, population, archive, args):
@@ -365,23 +353,20 @@ def numpy_best_archiver(random, population, archive, args):
 
 
 def main():
-    args = dict()
-
     # there are a lot of moving parts inside an EA, so some modifications will still need to be performed by hand
 
     # a few hard-coded values, to be changed depending on the problem
     # relevant variables are stored in a dictionary, to ensure compatibility with inspyred
+    args = dict()
 
     # unique name of the directory
     args["log_directory"] = "unique-name"
     args["save_directory"] = args["log_directory"]
     args["population_file_name"] = "population.csv"
-    # save the whole population at every iteration
-    args["save_at_every_iteration"] = True
-    #  list of random seeds, because we might want to run the evolutionary algorithm in a loop
-    args["random_seeds"] = [42]
+    args["save_at_every_iteration"] = True  # save the whole population at every iteration
+    args["random_seeds"] = [42]  # list of random seeds, because we might want to run the evolutionary algorithm in a loop
     args["n_threads"] = 8  # TODO change number of threads
-
+    
     # initialize logging, using a logger that smartly manages disk occupation
     logger = initialize_logging(args["log_directory"])
 
@@ -389,7 +374,7 @@ def main():
     args["logger"] = logger
 
     # start program
-    logger.info("Hi, I am a friendly program, I'm starting now :D")
+    logger.info("Hi, I am a program, starting now !\n")
     logger.debug(type(logger))
 
     # start a series of experiments, for each random seed
@@ -400,8 +385,7 @@ def main():
         # initalization of ALL random number generators, to try and ensure repatability
         prng = random.Random(random_seed)
         np.random.seed(
-            random_seed
-        )  # this might become deprecated, and creating a dedicated numpy pseudo-random number generator instance would be better
+            random_seed)  # this might become deprecated, and creating a dedicated numpy pseudo-random number generator instance would be better
 
         # create an instance of EvolutionaryComputation (generic EA) and set up its parameters
         # define all parts of the evolutionary algorithm (mutation, selection, etc., including observer)
@@ -425,33 +409,28 @@ def main():
             n_rows = args["shape"][0]
             n_cols = args["shape"][1]
 
-            return [random.uniform(-1.0, 1.0) for _ in range(0, n_cols * n_rows)]
+            return [random.uniform(-2.0, 2.0) for _ in range(0, n_cols * n_rows)]
 
-        # Creation of the model
         from main import MODEL
 
         my_model = MODEL()
-        my_model.read_CSV()
+        my_model.creat_linear(4)
 
         my_model.enzymes.add_to_all_reaction()
-        my_model.parameters.add_enzymes()
-
         my_model.parameters.add_externals()
+        my_model.parameters.add_enzymes()
+        my_model.test_real_data()
 
         my_model.elasticity.s.half_satured()
 
         final_population = ea.evolve(
             generator=generator,
             evaluator=multi_thread_evaluator,
-            # Size of the population
-            pop_size=10,
+            pop_size=100,
             num_selected=150,
-            # Objectif ?
             maximize=True,
-            # Extreme values that the poulation must not cross
-            bounder=inspyred.ec.Bounder(-1.0, 1.0),
-            # Limit of iteration
-            max_evaluations=100,
+            bounder=inspyred.ec.Bounder(-2.0, 2.0),
+            max_evaluations=1000,
             # all items below this line go into the 'args' dictionary passed to each function
             logger=args["logger"],
             shape=my_model.elasticity.p.df.shape,
@@ -460,15 +439,15 @@ def main():
             random_seed=args["random_seed"],
             save_directory=args["save_directory"],
             save_at_every_iteration=args["save_at_every_iteration"],
-            # Name of the fitness labels
-            fitness_names=["FDP", "AMP"],
+            fitness_names=["fitness_1", "fitness_2"],
             my_model=my_model,
         )
 
     # TODO do something with the best individual
-
+    
     # close logger
     close_logging(logger)
+
     return
 
 

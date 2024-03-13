@@ -48,23 +48,16 @@ class Operon_class:
         """
 
         # Look if the operon is already in the model
-        if name in self.df.index.to_list():
-            raise NameError(f"The input operon {name} is already in the operon dataframe !\n")
+        if name in self.df.index:
+            raise NameError(f"The input operon \'{name}\' is already in the operon dataframe !\n")
 
         # We look for every enzyme linked to this operon
         for enzyme in enzymes_linked:
             # If the enzyme is in the enzyme or or metabolite dataframe
-            if enzyme not in (self.__class_MODEL_instance.parameters.df.index):
-                raise NameError(
-                    f"The input enzyme {enzyme} is not in the parameters dataframe !\n"
-                )
-            # And if the enzyme is already link to an other operon
-            for operon in self.df.index:
-                if enzyme in self.df.at[operon, "Enzymes linked"]:
-                    raise NameError(
-                        f"The input enzyme {enzyme} is already linked to the operon {operon} ! \n"
-                    )
-        
+            if enzyme not in (self.__class_MODEL_instance.enzymes.df.index):
+                raise NameError(f"The input enzyme \'{enzyme}\' is not in the enzymes dataframe !\n")
+
+
         # We check if the input value of the mixed covariance is a number
         if not isinstance(mixed_covariance, (int, float)) :
             raise TypeError(f"The input argument 'mixed_covariance' must be a number (int or float) and not a {type(mixed_covariance)} !\n")
@@ -78,6 +71,7 @@ class Operon_class:
         # We add "_para" to the enzyme in the operon dataframe to keep a border between the enzyme as parameters and the one that are considered as species in the case of a transcriptional regulation 
         for i in range(len(enzymes_linked)) :
             enzymes_linked[i] = enzymes_linked[i] + "_para"
+
 
         # If everything is ok, we add the operon and its linked enzyme
         self.df.loc[name] = [enzymes_linked, mixed_covariance, activated]
@@ -203,9 +197,7 @@ class Operon_class:
 
         # Look if the operon is in the model
         if name not in self.df.index:
-            raise NameError(
-                f"The operon {name} is not in the operon dataframe, please enter a valide name \n"
-            )
+            raise NameError(f"The operon {name} is not in the operon dataframe, please enter a valide name \n")
 
         self.df.at[name, "Activated"] = True
 
@@ -225,8 +217,6 @@ class Operon_class:
 
         # Look if the operon is in the model
         if name not in self.df.index:
-            raise NameError(
-                f"The operon {name} is not in the operon dataframe, please enter a valide name \n"
-            )
+            raise NameError(f"The operon {name} is not in the operon dataframe, please enter a valide name \n")
 
         self.df.at[name, "Activated"] = False

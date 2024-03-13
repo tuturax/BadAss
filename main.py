@@ -117,13 +117,11 @@ class MODEL:
         # Cache cache :)
         self.__cache_rho = None
         self.__cache_cov = None
+        
         ################################
         #  Message display when the model is created
         ################################
-
-        print(
-            "Model created \n \nTo add metabolite, use .metabolites.add_meta \nTo add reaction,   use .reactions.add_reaction"
-        )
+        print(" ")
 
     #################################################################################
     ######    Representation = the Dataframe of the Stoichiometric matrix     #######
@@ -445,6 +443,7 @@ class MODEL:
     @property  # Core
     def __covariance(self):
         # If the cache is empty, we recompute the cov matrix and atribute the result to the cache value
+
         if self.__cache_cov is None:
             # First, we get the response matrix as a local variable to avoid a call of function everytime.
             R = self.__R
@@ -565,30 +564,34 @@ class MODEL:
     ###########################
     # Correlation
     @property  # Core
-    def __corelation(self):
-        if self.__cache_rho is None:
+    def __correlation(self):
+        if self.__cache_rho is None :
+            # We create an empty matrix
+            rho = np.zeros(shape=self.covariance.shape)
+
+            # If there is not frequency aspect
             if self.__frequency_omega == 0.0 :
-                rho = np.zeros(shape=self.covariance.shape)
+                
                 for i in range(rho.shape[0]):
                     for j in range(rho.shape[1]):
                         rho[i][j] = self.__covariance[i][j] / (
-                            (self.__covariance[i][i] * self.__covariance[j][j]) ** 0.5
-                        )
+                                    (self.__covariance[i][i] * self.__covariance[j][j]) ** 0.5)
+            
             else : 
-                rho = np.zeros(shape=self.covariance.shape)
                 for i in range(rho.shape[0]):
                     for j in range(rho.shape[1]):
                         rho[i][j] = np.real(self.__covariance[i][j]) / (
                             (np.real(self.__covariance[i][i]) * np.real(self.__covariance[j][j])) ** 0.5
                         )
+            
             self.__cache_rho = rho
 
         return self.__cache_rho
 
     @property  # Displayed
-    def corelation(self):
+    def correlation(self):
         return pd.DataFrame(
-            self.__corelation,
+            self.__correlation,
             index=self.covariance.index,
             columns=self.covariance.columns,
         )
@@ -601,7 +604,10 @@ class MODEL:
             MI = np.zeros(shape=self.covariance.shape)
             for i in range(MI.shape[0]):
                 for j in range(MI.shape[1]):
-                    MI[i][j] = -0.5 * np.log(1 - self.__corelation[i][j] ** 2)
+                    if np.abs(self.__correlation[i][j]) == 1 :
+                        MI[i][j] = np.inf
+                    else : 
+                        MI[i][j] = -0.5 * np.log(1 - self.__correlation[i][j] ** 2)
             self.__cache_MI = MI
 
         return self.__cache_MI
@@ -1494,7 +1500,7 @@ class MODEL:
     def objective(self, variable1: str, variable2: str):
         ### Description of the fonction
         """
-        Fonction to compute the Mutual information bteween to variable
+        Fonction to return an objective function that represent the difference between 
 
         variable1, variable2 : string of the name of the variable that we want to compute the mutual information
 
@@ -1546,7 +1552,7 @@ class MODEL:
         result = result.lower()
 
         if result == "mi" or result == "mutual information":
-            data_frame = self.group_MI()
+            data_frame = self.MI
         elif result == "rho" or result == "correlation":
             data_frame = self.rho()
         elif result == "cov" or result == "covariance":
@@ -1572,12 +1578,12 @@ class MODEL:
         # Then we create a new matrix with only the index specified
         data_frame = data_frame.loc[index_to_keep_bis, index_to_keep_bis]
         matrix = data_frame.to_numpy(dtype="float64")
+        
 
         fig, ax = plt.subplots()
 
         if result == "mi":
             custom_map = matplotlib.colors.LinearSegmentedColormap.from_list("custom", ["white", "blue"])
-
             im = plt.imshow(matrix, cmap=custom_map, norm=matplotlib.colors.LogNorm())
 
         elif result == "rho":
@@ -1586,9 +1592,9 @@ class MODEL:
             im = plt.imshow(matrix, cmap=custom_map, vmin=-1, vmax=1)
 
         elif result == "cov":
-            custom_map = matplotlib.colors.LinearSegmentedColormap.from_list("custom", ["white", "blue"])
-
-            im = plt.imshow(matrix, cmap=custom_map)
+            custom_map = matplotlib.colors.LinearSegmentedColormap.from_list("custom", ["red", "white", "blue"])
+            max_abs = np.max(np.abs(matrix))
+            im = plt.imshow(matrix, cmap='RdBu', vmin=-max_abs, vmax=max_abs)
 
         # Display the label next to the axis
         if label == True:
@@ -1925,7 +1931,7 @@ class MODEL:
 
     #############################################################################
     #############   Function to display the escher map  #########################
-    def escher_meta(self, studied="glc_e", result= "rho", model_json= '../Exemples/SBTab/e_coli_core.json', map_json = './../Exemples/SBTab/e_coli_core.Core metabolism.json'):
+    def escher_meta(self, studied="atp_c", result= "rho", model_json= '../Exemples/SBTab/e_coli_model.json', map_json = './../Exemples/SBTab/e_coli_core_map.json'):
         ### Description of the fonction
         """
         Fonction display the Escher map
@@ -1950,7 +1956,7 @@ class MODEL:
         if result.lower() == "mi" :
             matrix = self.MI
         else :
-            matrix = self.corelation
+            matrix = self.correlation
 
 
         import escher
@@ -2023,7 +2029,7 @@ class MODEL:
 
     #############################################################################
     #############   Function to display the escher map  #########################
-    def escher_mean_deviation(self, fixed_element=[], fixed_value=[], model_json= '../Exemples/SBTab/e_coli_core.json', map_json = './../Exemples/SBTab/e_coli_core.Core metabolism.json'):
+    def escher_mean_deviation(self, fixed_element=[], fixed_value=[], model_json= '../Exemples/SBTab/e_coli_core_model.json', map_json = './../Exemples/SBTab/e_coli_core_map.json'):
         ### Description of the fonction
         """
         Fonction display the Escher map of the model with the deviation of the mean after the fixation of a variable as value
@@ -2090,7 +2096,7 @@ class MODEL:
 
     #############################################################################
     #############   Function to display the escher map  #########################
-    def escher_reference(self, model_json= '../Exemples/SBTab/e_coli_core.json', map_json = './../Exemples/SBTab/e_coli_core.Core metabolism.json'):
+    def escher_reference(self, model_json= '../Exemples/SBTab/e_coli_core_model.json', map_json = './../Exemples/SBTab/e_coli_core_map.json'):
         ### Description of the fonction
         """
         Fonction display the Escher map with the reference value
@@ -2186,25 +2192,25 @@ class MODEL:
             elif key == "Covariance" :
                 self.real_data[key] = self.covariance.copy()
 
-                error = np.random.uniform(-0.01, 0.01, len(self.covariance.index)*len(self.covariance.columns))
+                self.real_data[key].values[:] = np.random.uniform(-0.01, 0.01, size=self.covariance.shape )
+                
 
-                for i, index in enumerate(self.covariance.index) :
-                    for j,column in enumerate(self.covariance.columns) :
-                        self.real_data[key].at[index, column] = self.real_data[key].at[column, index] = self.real_data[key].at[index, column] + error[i*len(self.covariance.index) + j]
             
     def similarity(self, only_Cov = True) :
 
         diff_cov = self.covariance - self.real_data["Covariance"]
 
+
         # L1 is more sensible to the global difference
         norm_L1 = np.abs(diff_cov).sum().sum()  
         # L2 is more usefull to focus on magnitude of difference
-        norm_L2 = np.sqrt((diff_cov ** 2).sum().sum())  
+        norm_L2 = np.sqrt((diff_cov**2).sum().sum())  
 
         sim_cov = norm_L2
 
         if only_Cov : 
-            return sim_cov
+            sum_diag = np.sqrt(np.trace(diff_cov**2))
+            return 0.5*(sim_cov - sum_diag)
 
         else : 
             sim_react = np.linalg.norm( self.real_data["Flux"]['Flux'].values - self.reactions.df['Flux'].values )
@@ -2702,6 +2708,7 @@ class MODEL:
         directory     : str 
             directory/file_name.tsv
         """
+
         import sbtab
         import re
 
@@ -2709,8 +2716,6 @@ class MODEL:
 
         # Reset of the model
         self.reset
-
-        print(f"{np.round(time.time() - start, 5)} s : Time after reset \n")
 
         # Then we desactivate the automatic update of the model
         self.activate_update = False
@@ -2733,7 +2738,6 @@ class MODEL:
         filename = filepath.split('/')[-1]
         St = sbtab.SBtab.read_csv(filepath=filepath, document_name=filename)
 
-        print(f"{np.round(time.time() - start, 5)} s : Time after read of SBTAB doc \n")
 
         # We attribute the list
         for table in St.sbtabs :
@@ -2752,7 +2756,6 @@ class MODEL:
             elif table.table_id == "EquilibriumConstant" :
                 Equilibrium_const = table.value_rows
 
-        print(f"{np.round(time.time() - start, 5)} s : Time after the attribution of the tab to the local variable \n")
         
         # First we add the reactions
         for i, reaction in enumerate(reactions) :
@@ -2798,7 +2801,6 @@ class MODEL:
             
             self.reactions.add(name, dict_meta, k_eq=k_eq, reversible=reversible, flux=rate)
         
-        print(f"{np.round(time.time() - start, 5)} s : Time after attribution of every reactions \n")
 
         # Then we add metabolites
         for meta in metabolites :
@@ -2817,12 +2819,10 @@ class MODEL:
             
             self.metabolites.add(name, external, concentration)
 
-        print(f"{np.round(time.time() - start, 5)} s : Time after attribution of the metabolite \n")
 
         self.activate_update = True
-        self._update_network()
+        self._update_elasticity()
 
-        print(f"{np.round(time.time() - start, 5)} s : Time after the update of the network \n")
             
 
 
@@ -3197,8 +3197,8 @@ class MODEL:
         self.__original_atributes["metabolites"] = copy.deepcopy(self.metabolites.df)
         self.__original_atributes["reactions"] = copy.deepcopy(self.reactions.df)
         self.__original_atributes["parameters"] = copy.deepcopy(self.parameters.df)
-        self.__original_atributes["elasticities_s"] = copy.deepcopy(self.elasticity.s._df)
-        self.__original_atributes["elasticities_p"] = copy.deepcopy(self.elasticity.p.__df)
+        self.__original_atributes["elasticities_s"] = copy.deepcopy(self.elasticity.s.df)
+        self.__original_atributes["elasticities_p"] = copy.deepcopy(self.elasticity.p.df)
         self.__original_atributes["enzymes"] = copy.deepcopy(self.enzymes.df)
 
     #############################################################################
@@ -3208,7 +3208,7 @@ class MODEL:
         self.metabolites.df = self.__original_atributes["metabolites"]
         self.reactions.df = self.__original_atributes["reactions"]
         self.parameters.df = self.__original_atributes["parameters"]
-        self.elasticity.s._df = self.__original_atributes["elasticities_s"]
+        self.elasticity.s.__df = self.__original_atributes["elasticities_s"]
         self.elasticity.p.__df = self.__original_atributes["elasticities_p"]
         self.enzymes.df = self.__original_atributes["enzymes"]
 

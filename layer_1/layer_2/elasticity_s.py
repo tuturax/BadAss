@@ -15,7 +15,7 @@ class Sub_Elasticity_class:
         # Private attribute for the instance of the Main class
         self.__class_MODEL_instance = class_MODEL_instance
 
-        self._df = pd.DataFrame()
+        self.__df = pd.DataFrame()
         self.thermo = pd.DataFrame()
         self.enzyme = pd.DataFrame()
         self.regulation = pd.DataFrame()
@@ -23,13 +23,13 @@ class Sub_Elasticity_class:
     #################################################################################
     #########           Return the Dataframe of the elasticity p           ##########
     def __repr__(self) -> str:
-        return str(self._df)
+        return str(self.__df)
 
     #################################################################################
     #########        Fonction to return the shape of the matrix            ##########
     @property
     def len(self):
-        return self._df.shape
+        return self.__df.shape
 
     #################################################################################
     #########        Setter to change the elasticities matrix              ##########
@@ -41,10 +41,10 @@ class Sub_Elasticity_class:
             and self.enzyme.eq(0).all().all()
             and self.regulation.eq(0).all().all()
         ):
-            return self._df
+            return self.__df
         else:
-            self._df = self.thermo - self.enzyme + self.regulation
-            return self._df
+            self.__df = self.thermo - self.enzyme + self.regulation
+            return self.__df
 
     @df.setter
     def df(self, matrix):
@@ -54,11 +54,11 @@ class Sub_Elasticity_class:
                     "The shape of your input matrix isn't matching with the elasticity matrix"
                 )
             else:
-                self._df.values[:] = matrix
+                self.__df.values[:] = matrix
                 self.__class_MODEL_instance._reset_value(session="E_s")
 
         elif type(matrix) == type(pd.DataFrame()):
-            self._df = matrix
+            self.__df = matrix
             self.__class_MODEL_instance._reset_value(session="E_s")
 
         else:
@@ -91,7 +91,7 @@ class Sub_Elasticity_class:
         Method to attribute to the E_s matrix the value of a half-satured enzyme
         """
         self.reset()
-        self._df = -0.5 * self.__class_MODEL_instance.N_without_ext.transpose()
+        self.__df = -0.5 * self.__class_MODEL_instance.N_without_ext.transpose()
 
     #################################################################################
     #########        Fonction to change a coefficient of the matrix        ##########
