@@ -43,17 +43,16 @@ class Elasticity_p_class:
                 )
             else:
                 self.__df.values[:] = matrix
-                self.__class_MODEL_instance._reset_value(session="E_p")
+                self.__class_MODEL_instance._reset_value(session="e_p")
 
         # If the new matrix is a dataframe, it's shape must be N_reaction X N_parameters
         elif isinstance(matrix, pd.DataFrame):
             self.__df = matrix
-            self.__class_MODEL_instance._reset_value(session="E_p")
+            self.__class_MODEL_instance._reset_value(session="e_p")
 
         else:
             raise TypeError(
-                "Please enter a numpy matrix  or Pandas dataframe to fill the E_s matrix"
-            )
+                "Please enter a numpy matrix  or Pandas dataframe to fill the E_s matrix" )
 
     #################################################################################
     #########        Fonction to change a coefficient of the matrix        ##########

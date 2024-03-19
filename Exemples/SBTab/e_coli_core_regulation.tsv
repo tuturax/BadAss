@@ -1,0 +1,4 @@
+!!SBtab TableType='Regulator'		
+!ID	!TargetReaction	!RegulationType
+f6p_c	PFK	direct inhibition
+g6p_c	PYK	direct activation

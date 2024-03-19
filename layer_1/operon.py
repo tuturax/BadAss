@@ -202,17 +202,17 @@ class Operon_class:
         self.df.at[name, "Activated"] = True
 
     #################################################################################
-    #########             Fonction to desactivate an operon                ##########
+    #########             Fonction to inactivate an operon                ##########
 
-    def desactivate(self, name: str) -> None:
+    def inactivate(self, name: str) -> None:
         ### Description of the fonction
         """
-        Fonction to desactivate an operon
+        Fonction to inactivate an operon
         
         Parameters
         ----------
         name        : str
-            Name of the operon to desactivate
+            Name of the operon to inactivate
         """
 
         # Look if the operon is in the model

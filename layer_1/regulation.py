@@ -39,7 +39,7 @@ class Regulation_class:
     #################################################################################
     #########           Fonction to add a regulation                       ##########
     def add(
-        self, name: str, regulated: str, regulator: str, coefficient=1, allosteric=True, activated = True, **kwargs):
+        self, name: str, regulated: str, regulator: str, coefficient=0.5, allosteric=True, activated = True, **kwargs):
         ### Description of the fonction
         """
         Fonction to add a regulation to the model
@@ -160,7 +160,7 @@ class Regulation_class:
             Name of the regulation arrow to remove
         """
 
-        self.desactivate(name)
+        self.inactivate(name)
 
         self.df.drop(name)
 
@@ -236,7 +236,7 @@ class Regulation_class:
         regulated = self.df.at[name, "Regulated flux"]
         regulator = self.df.at[name, "Regulator"]
         coeff = self.df.at[name, "Coefficient of regulation"]
-        # If the regulation arrows is initialy desactivated, we modifiy the elasticity
+        # If the regulation arrows is initialy inactivated, we modifiy the elasticity
         if self.df.at[name, "Activated"] == False : 
             
             # Case where it is an alosteric regulation
@@ -264,24 +264,24 @@ class Regulation_class:
         self.df.at[name, "Activated"] = True
 
         # Then we update the rest of the model
-        self.__class_MODEL_instance.update_network()
+        self.__class_MODEL_instance._update_network()
 
 
 
 
     #################################################################################
-    #########        Fonction to desactivate a regulation arrow            ##########
+    #########        Fonction to inactivate a regulation arrow            ##########
 
-    def desactivate(self, name: str) -> None:
+    def inactivate(self, name: str) -> None:
         ### Description of the fonction
         """
-        Fonction to desactivate a regulation arrow
+        Fonction to inactivate a regulation arrow
         
         Parameters
         ----------
 
         name        : str
-            Name of the regulation name to desactivate
+            Name of the regulation name to inactivate
         """
 
         # Look if the regulation is in the model
@@ -316,4 +316,44 @@ class Regulation_class:
         self.df.at[name, "Activated"] = False
 
         # Then we update the rest of the model
-        self.__class_MODEL_instance.update_network()
+        self.__class_MODEL_instance._update_network()
+
+
+    #################################################################################
+    #########      Fonction to read a file of regulation database          ##########
+
+    def read_file(self, file_path: str) -> None:
+        ### Description of the fonction
+        """
+        Fonction to read a file of regulation database
+        
+        Parameters
+        ----------
+
+        name        : str
+            File_path of the regulation database (SBTab format)
+        """
+        import sbtab
+
+        filename = file_path.split('/')[-1]
+        St = sbtab.SBtab.read_csv(filepath=file_path, document_name=filename)
+
+        table = St.sbtabs[0] 
+
+        for reg in table.value_rows :
+            
+            meta = reg[0]
+            flux = reg[1]
+            type_reg = reg[2]
+            
+            allosteric_list = ["direct", "alosteric"]
+            if type_reg.split(" ")[0].lower() in allosteric_list  :
+                allosteric = True
+            else :
+                allosteric = False
+
+            coeff = 1
+            if type_reg.split(" ")[1] == "inhibition" :
+                    coeff = -1
+
+            self.__class_MODEL_instance.regulations.add(name = f"{type_reg} {meta} -> {flux}", regulated=flux, regulator=meta, coefficient=coeff,allosteric=allosteric)

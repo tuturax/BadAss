@@ -96,7 +96,7 @@ class MODEL:
         self.data_sampling = pd.DataFrame(columns=["Name", "Type", "Mean", "Standard deviation", "Distribution"])
 
         # real data of the model
-        self.real_data = {"Flux": pd.DataFrame(columns=["Flux"]), "Concentration" : pd.DataFrame(columns=["Concentration"]), "Covariance" : pd.DataFrame()}
+        self.real_data = {"Flux": pd.DataFrame(columns=["Flux"]), "Concentration" : pd.DataFrame(columns=["Correlation"]), "Correlation" : pd.DataFrame()}
 
         # Frequency of the system
         self.__frequency_omega = 0.0
@@ -545,10 +545,13 @@ class MODEL:
     @property  # Core
     def __entropy_conditional(self):
         if self.__cache_conditional_h is None:
+
             condi_h = np.zeros(shape=self.covariance.shape)
+            
             for i in range(condi_h.shape[0]):
                 for j in range(condi_h.shape[1]):
-                    condi_h[i][j] = self.__joint_entropy[j][i] - self.__entropy[j]
+                    condi_h[i][j] = self.__entropy[i] - self.__MI[j][i]
+
             self.__cache_conditional_h = condi_h
 
         return self.__cache_conditional_h
@@ -571,18 +574,18 @@ class MODEL:
 
             # If there is not frequency aspect
             if self.__frequency_omega == 0.0 :
+                v = np.diag(np.diag(self.__covariance))
                 
-                for i in range(rho.shape[0]):
-                    for j in range(rho.shape[1]):
-                        rho[i][j] = self.__covariance[i][j] / (
-                                    (self.__covariance[i][i] * self.__covariance[j][j]) ** 0.5)
-            
+                for i in range(len(v)) :
+                    v[i][i] = 1/np.sqrt(v[i][i])
+                
+                rho = np.dot(v,np.dot(self.__covariance,v))
+
             else : 
                 for i in range(rho.shape[0]):
                     for j in range(rho.shape[1]):
                         rho[i][j] = np.real(self.__covariance[i][j]) / (
-                            (np.real(self.__covariance[i][i]) * np.real(self.__covariance[j][j])) ** 0.5
-                        )
+                            (np.real(self.__covariance[i][i]) * np.real(self.__covariance[j][j])) ** 0.5)
             
             self.__cache_rho = rho
 
@@ -602,12 +605,15 @@ class MODEL:
     def __MI(self):
         if self.__cache_MI is None:
             MI = np.zeros(shape=self.covariance.shape)
+
             for i in range(MI.shape[0]):
                 for j in range(MI.shape[1]):
-                    if np.abs(self.__correlation[i][j]) == 1 :
+
+                    if np.abs(self.__correlation[i][j]) >= 1 or i==j:
                         MI[i][j] = np.inf
                     else : 
                         MI[i][j] = -0.5 * np.log(1 - self.__correlation[i][j] ** 2)
+
             self.__cache_MI = MI
 
         return self.__cache_MI
@@ -653,6 +659,18 @@ class MODEL:
     def temporal_R_v_p(self, t=0.0):
         return np.dot(self.temporal_C_v_p(t), self.elasticity.p.df.to_numpy(dtype="float64"))
 
+
+    ######################################################################################
+    #                                                                                    #
+    # find # reset # setter # update #                                                   #
+    #                                                                                    #
+    ######################################################################################
+    #                                                                                    #
+    #                                    TOOLS                                           #
+    #                                                                                    #
+    ######################################################################################
+
+
     ###########################################################################
     ############  Function to find where the variable name is  ################
     def find(self, name: str):
@@ -679,9 +697,6 @@ class MODEL:
             self.__cache_Reversed_Jacobian = None
 
         elif session.lower() == "e_p":
-            # Reset the value of the cache data
-            self.__cache_Jacobian = None
-            self.__cache_Reversed_Jacobian = None
             # Reset of the cache value of the MCA coeff
             self.__cache_R_s_p = None
             self.__cache_R_v_p = None
@@ -2161,9 +2176,62 @@ class MODEL:
         display(builder)
 
 
+
+
+
+    def plot_entropy(self, studied:str, reversed = False) :
+
+        index = self.MI.index
+        if studied not in index :
+            raise NameError(f"The input name '{studied}' isn't in the model !")
+        
+        pos_studied = index.get_loc(studied)
+
+        if reversed == False :
+            entropy_c = self.entropy_conditional.loc[studied].to_numpy()
+            entropy_c[np.isinf(entropy_c)] = 0
+        else :
+            entropy_c = self.entropy_conditional[studied].to_numpy()
+            entropy_c[np.isinf(entropy_c)] = 0
+
+        MI = self.MI.loc[studied].to_numpy()
+        MI[np.isinf(MI)] = 0
+
+        per_cent = np.zeros(MI.shape)
+        for i in range(len(MI)) :
+            if i != pos_studied : 
+                per_cent[i] = abs(100*MI[i]/(MI[i]+entropy_c[i]))
+            else : 
+                per_cent[i] = 100
+
+        entropy_studied = self.entropy.at[studied, "Entropy"]
+        # width of the bars
+        width_bar = 0.35
+
+        plt.bar(index, MI, width=width_bar, label='MI', color='blue')
+
+        plt.bar(index, entropy_c, bottom=MI, width=width_bar, label='CE', color="darkorange")
+
+        for i in range(len(index)):
+            if i != pos_studied :
+                plt.text(index[i], entropy_c[i]+MI[i], str(int(per_cent[i]))+"%", ha='center', va='bottom')
+            else :
+                plt.text(studied, entropy_studied, "100%", ha='center', va='bottom')
+
+        # Then we add the special case of the studied element itself
+        plt.bar(studied, entropy_studied, width=width_bar, color='blue')
+        
+
+        plt.title(f'Value the shared information with {studied}')
+        plt.xlabel('Index')
+        plt.ylabel('Value of information')
+        plt.xticks(rotation=45, ha="right", rotation_mode="anchor")
+        plt.legend()
+
+
     ################################################################################
     #                                                                              #
-    # cost # fitness # robustness # real data # objectif function  #  evaluation   #
+    # objectif function  #  real data # cost                                       #
     #                                                                              #
     ################################################################################
     #                                                                              #
@@ -2172,6 +2240,10 @@ class MODEL:
     ################################################################################
 
     def test_real_data(self) :
+        ### Description of the fonction
+        """
+        Fonction to create fake real data 
+        """
         for key in self.real_data.keys() :
             if key == "Flux" :
                 self.real_data[key] = pd.DataFrame(index=self.reactions.df.index)
@@ -2189,28 +2261,40 @@ class MODEL:
                 for i,reaction in enumerate(self.metabolites.df.index) :
                     self.real_data[key].at[reaction, "Concentration"] = self.real_data[key].at[reaction, "Concentration"] + error[i]
 
-            elif key == "Covariance" :
+            elif key == "Correlation" :
                 self.real_data[key] = self.covariance.copy()
 
-                self.real_data[key].values[:] = np.random.uniform(-0.01, 0.01, size=self.covariance.shape )
-                
+                a = np.random.uniform(-1.0, 1.0, size=self.covariance.shape)
+                b = np.dot(a, a.T)
 
+                
+                for i in range(len(self.parameters.df.index)) :
+                    for j in range(len(self.parameters.df.index)) :
+                        b[i][j] = 0
+
+                for i in range(b.shape[0]) :
+                    b[i][i] = 1
+                
+                self.real_data[key].values[:] = b
+                
+                
             
     def similarity(self, only_Cov = True) :
-
-        diff_cov = self.covariance - self.real_data["Covariance"]
-
+        
+        diff_rho = self.__correlation - self.real_data["Correlation"]
 
         # L1 is more sensible to the global difference
-        norm_L1 = np.abs(diff_cov).sum().sum()  
+        norm_L1 = np.abs(diff_rho).sum().sum()  
         # L2 is more usefull to focus on magnitude of difference
-        norm_L2 = np.sqrt((diff_cov**2).sum().sum())  
+        norm_L2 = np.sqrt((diff_rho**2).sum().sum())  
 
         sim_cov = norm_L2
 
+
+
         if only_Cov : 
-            sum_diag = np.sqrt(np.trace(diff_cov**2))
-            return 0.5*(sim_cov - sum_diag)
+
+            return sim_cov
 
         else : 
             sim_react = np.linalg.norm( self.real_data["Flux"]['Flux'].values - self.reactions.df['Flux'].values )
@@ -2222,6 +2306,9 @@ class MODEL:
             return sim_tot
 
 
+    def MOO(self) :
+        import MOO
+        
 
     ################################################################################
     #                                                                              #
@@ -2279,7 +2366,35 @@ class MODEL:
 
     #############################################################################
     ##################   Function to read a CSV/XLS file  #######################
-    def read_CSV(self, file="/home/alequertier/Documents/BadAss/Exemples/XLS/ecoli_core_model.xls"):
+    def setup(self, file_path:str):
+        ### Description of the fonction
+        """
+        Fonction setup the model with .csv file
+        
+        Parameters
+        ----------
+        file     : str 
+            The directory of the csv file
+
+        """
+        df_options = pd.read_csv(file_path, index_col=0, header=0)
+
+        if df_options.at["add enzyme to all reaction", "value"] == True :
+            self.enzymes.add_to_all_reaction()
+        if df_options.at["add enzyme in parameters", "value"] == True :
+            self.parameters.add_enzymes()
+        if df_options.at["add external metabolites in parameters", "value"] == True :
+            self.parameters.add_externals()
+        if df_options.at["half saturated", "value"] == True :
+            self.elasticity.s.half_satured()
+        if df_options.at["remove temperture", "value"] == True :
+            self.parameters.remove("Temperature")
+
+
+
+    #############################################################################
+    ##################   Function to read a CSV/XLS file  #######################
+    def read_CSV(self, file="../Exemples/XLS/ecoli_core_model.xls"):
         ### Description of the fonction
         """
         Fonction read an Excel file
@@ -2310,15 +2425,14 @@ class MODEL:
     ###################   Function to read a SBML file  #########################
     def read_SBML(
         self,
-        directory="/home/alequertier/Documents/BadAss/Exemples/SBML/",
+        directory="../Exemples/SBML/",
         file_SBML="E_coli_CCM.xml",
         reference_state_metabolites="reference_state_metabolites.tsv",
         reference_state_c="reference_state_c.tsv",
         reference_state_reactions="reference_state_reactions.tsv",
         reference_state_v="reference_state_v.tsv",
         reference_state_keq="reference_state_keq.tsv",
-        ignore_error=True,
-    ):
+        ignore_error=True):
         ### Description of the fonction
         """
         Fonction read a SBML file

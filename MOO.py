@@ -285,6 +285,7 @@ def evaluate_individual(individual, args, index, fitness_list, thread_lock, thre
     # writing on the same resource from multiple threads at the same time
     thread_lock.acquire()
 
+    print(index)
 
     fitness_list[index] = fitness_function(
         individual, args
@@ -302,8 +303,15 @@ def fitness_function(individual, args):
     This is the fitness function. It should be replaced by the 'true' fitness function to be optimized.
     """
 
-    my_model = args["my_model"]
+    my_model = args["model"]
+    
+
     my_model.elasticity.p.df = np.array(individual).reshape(args["shape"])
+
+    
+    #print(f"Fitness Function : {my_model.similarity()}")
+
+
     fitness_1 = my_model.similarity()
     fitness_2 = my_model.similarity()
 
@@ -384,8 +392,7 @@ def main():
 
         # initalization of ALL random number generators, to try and ensure repatability
         prng = random.Random(random_seed)
-        np.random.seed(
-            random_seed)  # this might become deprecated, and creating a dedicated numpy pseudo-random number generator instance would be better
+        np.random.seed(random_seed)  # this might become deprecated, and creating a dedicated numpy pseudo-random number generator instance would be better
 
         # create an instance of EvolutionaryComputation (generic EA) and set up its parameters
         # define all parts of the evolutionary algorithm (mutation, selection, etc., including observer)
@@ -403,14 +410,6 @@ def main():
         ea.observer = observer
         ea.logger = args["logger"]
 
-        # also create a generator function
-        def generator(random, args):
-            # return [random.uniform(-2.0, 2.0) for _ in range(args["n_dimensions"])]
-            n_rows = args["shape"][0]
-            n_cols = args["shape"][1]
-
-            return [random.uniform(-2.0, 2.0) for _ in range(0, n_cols * n_rows)]
-
         from main import MODEL
 
         my_model = MODEL()
@@ -419,18 +418,40 @@ def main():
         my_model.enzymes.add_to_all_reaction()
         my_model.parameters.add_externals()
         my_model.parameters.add_enzymes()
+        my_model.elasticity.s.half_satured()
+        my_model.parameters.remove("Temperature")
         my_model.test_real_data()
 
-        my_model.elasticity.s.half_satured()
+        # also create a generator function
+        def generator(random, args):
+            # return [random.uniform(-2.0, 2.0) for _ in range(args["n_dimensions"])]
+            n_rows = args["shape"][0]
+            n_cols = args["shape"][1]
+            
+            my_model = args["model"]
+            
+            random_elements = [np.random.uniform(-2.0, 2.0) for _ in range(0, n_rows*n_cols)]
+
+            return random_elements
+            
+
+
+        print(f"Total number of element in the E_s matrix : {my_model.elasticity.p.df.shape[0] * my_model.elasticity.p.df.shape[1]}\n")
+        print(my_model.similarity())
 
         final_population = ea.evolve(
             generator=generator,
             evaluator=multi_thread_evaluator,
-            pop_size=100,
-            num_selected=150,
-            maximize=True,
+            # Number of individuals at each generation
+            pop_size=200,
+            # Number of best individuals that we keep between each generation
+            num_selected=50,
+            # Do we maximmize the objectif function
+            maximize=False,
+            # Bounder of the elements that we modify
             bounder=inspyred.ec.Bounder(-2.0, 2.0),
-            max_evaluations=1000,
+            # Max number of individuals that we keep = pop_size + num_selected*N_generation
+            max_evaluations=500,
             # all items below this line go into the 'args' dictionary passed to each function
             logger=args["logger"],
             shape=my_model.elasticity.p.df.shape,
@@ -440,14 +461,24 @@ def main():
             save_directory=args["save_directory"],
             save_at_every_iteration=args["save_at_every_iteration"],
             fitness_names=["fitness_1", "fitness_2"],
-            my_model=my_model,
+            model=my_model,
         )
 
     # TODO do something with the best individual
+
+
+    best_values = max(final_population).candidate
+
+    shape = my_model.elasticity.p.df.shape
+
+    matrix_best = np.zeros(shape)
+    for i in range(shape[0]):
+        matrix_best[i] = best_values[i*shape[1]:(i+1)*shape[1]]
     
+    print(matrix_best)
     # close logger
     close_logging(logger)
-
+    
     return
 
 
