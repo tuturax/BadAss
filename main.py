@@ -1174,6 +1174,7 @@ class MODEL:
         ### Description of the fonction
         """
         Fonction to compute the entropy of a group when a vector parameter is fixed
+        return the entropy or the new mean and SD
 
         elements_to_fixe  : str or list
             a string or a list of string representing the variables/parameter to fixed
@@ -1269,17 +1270,54 @@ class MODEL:
         if len(elements_to_fixe) != len(new_mean_fixed) and new_mean_fixed != [] :
             raise ValueError(f"The size of 'elements_to_fixe'={len(elements_to_fixe)} and 'new_mean_fixed'={len(new_mean_fixed)} must be the same !\n")
         
-
+        
         new_mean_fixed = np.array(new_mean_fixed)
         old_mean_fixed = np.array(old_mean_fixed)
+
+        # Creation of an entropy dataframe where will be store the new value of entropy
+        entropy_df = pd.DataFrame(columns=["Old H", "New H", "Delta H"])
+        for studied in elements_to_study :
+            entropy_df.at[studied, "Old H"] = self.entropy.at[studied, "Entropy"]
+
 
         ##################
         # Computation
 
-        # Initialisation of the MI matrix
-        entropy = pd.DataFrame(index=elements_to_study, columns=elements_to_fixe, dtype=float)
+        # We create intermediate matrix
+        Cov_ss = Cov_df.loc[elements_to_study, elements_to_study].to_numpy(dtype="float64")
+        Cov_ff = Cov_df.loc[elements_to_fixe, elements_to_fixe].to_numpy(dtype="float64")
+        Cov_sf = Cov_df.loc[elements_to_study, elements_to_fixe].to_numpy(dtype="float64")
+        Cov_fs = Cov_sf.T
+
+        
+        # The targeted covariance matrix of the studied elements in the case where there is a fixed vector
+        Cov_ss_f = Cov_ss - np.dot(Cov_sf, np.dot(np.linalg.inv(Cov_ff), Cov_fs))
+        
+        vec_h = []
+        for i in range(len(Cov_ss_f)):
+            vec_h.append(0.5 * np.log(2 * np.pi * np.e * Cov_ss_f[i, i]) + 0.5)
+
+        # New entropy of the studied elements with the fixed vector
+        total_entropy = len(Cov_ss) / 2 * np.log(2 * np.pi * np.e) + np.log(np.linalg.det(Cov_ss_f))
+        
+        for i,index in enumerate(entropy_df.index) :
+            entropy_df["New H"] = vec_h
+            entropy_df["Delta H"] = entropy_df["New H"] - entropy_df["Old H"] 
+
+
+        # If the elements are fixed to an other values that the mean, the mean of the study elements change too !
+        delta_mean_study = np.dot(
+                            np.dot( Cov_sf, np.linalg.inv(Cov_ff)),
+                              (new_mean_fixed - old_mean_fixed) )
+
+        # Line to retablish the warning
+        np.seterr(divide="warn", invalid="warn")
+
+        #############
+        # return part
 
         # Special line for return of all variable
+        # Creation of dataframe 
         if return_all == True:
             # Intitialisation of the SD dataframe
             SD_df = pd.DataFrame(columns=["Old SD", "New SD", "Delta SD"])
@@ -1290,29 +1328,6 @@ class MODEL:
                 SD_df.loc[element] = [0 for column in SD_df.columns]
                 mean_df.loc[element] = [0 for column in mean_df.columns]
 
-        # We create intermediate matrix
-        Cov_ss = Cov_df.loc[elements_to_study, elements_to_study].to_numpy(dtype="float64")
-        Cov_ff = Cov_df.loc[elements_to_fixe, elements_to_fixe].to_numpy(dtype="float64")
-        Cov_sf = Cov_df.loc[elements_to_study, elements_to_fixe].to_numpy(dtype="float64")
-        Cov_fs = Cov_sf.T
-
-        # The targeted covariance matrix of the studied elements in the case where there is a fixed vector
-        Cov_ss_f = Cov_ss - np.dot(Cov_sf, np.dot(np.linalg.inv(Cov_ff), Cov_fs))
-
-        # New entropy of the studied elements with the fixed vector
-        entropy = len(Cov_ss) / 2 * np.log(2 * np.pi * np.e) + np.log(np.linalg.det(Cov_ss_f))
-
-        # If the elements are fixed to an other values that the mean, the mean of the study elements change too !
-        delta_mean_study = np.dot(
-            np.dot(Cov_sf, np.linalg.inv(Cov_ff)),
-            (new_mean_fixed - old_mean_fixed),
-        )
-
-        # Line to retablish the warning
-        np.seterr(divide="warn", invalid="warn")
-
-        #############
-        # return part
 
         # Case where we must return all variable and plot
         if return_all == True or plot == True:
@@ -1349,7 +1364,7 @@ class MODEL:
         ##    return entropy, Cov_ss_f, delta_mean_study
 
         else:
-            return entropy
+            return entropy_df
 
     """
    #################################################################################
@@ -2182,29 +2197,37 @@ class MODEL:
     def plot_entropy(self, studied:str, reversed = False) :
 
         index = self.MI.index
+
         if studied not in index :
             raise NameError(f"The input name '{studied}' isn't in the model !")
         
         pos_studied = index.get_loc(studied)
+        entropy_studied = self.entropy.at[studied, "Entropy"]
 
         if reversed == False :
             entropy_c = self.entropy_conditional.loc[studied].to_numpy()
-            entropy_c[np.isinf(entropy_c)] = 0
+
         else :
             entropy_c = self.entropy_conditional[studied].to_numpy()
-            entropy_c[np.isinf(entropy_c)] = 0
+
 
         MI = self.MI.loc[studied].to_numpy()
-        MI[np.isinf(MI)] = 0
+        for i in range(len(MI)) :
+            if np.isinf(MI[i]) :
+                MI[i] = entropy_studied
+                entropy_c[i] = 0
+
 
         per_cent = np.zeros(MI.shape)
         for i in range(len(MI)) :
-            if i != pos_studied : 
-                per_cent[i] = abs(100*MI[i]/(MI[i]+entropy_c[i]))
-            else : 
+            value = abs(100*MI[i]/(MI[i]+entropy_c[i]))
+            if np.isnan(value) :
                 per_cent[i] = 100
+            else : 
+                per_cent[i] = value
 
-        entropy_studied = self.entropy.at[studied, "Entropy"]
+
+        
         # width of the bars
         width_bar = 0.35
 
@@ -2213,19 +2236,57 @@ class MODEL:
         plt.bar(index, entropy_c, bottom=MI, width=width_bar, label='CE', color="darkorange")
 
         for i in range(len(index)):
-            if i != pos_studied :
-                plt.text(index[i], entropy_c[i]+MI[i], str(int(per_cent[i]))+"%", ha='center', va='bottom')
-            else :
-                plt.text(studied, entropy_studied, "100%", ha='center', va='bottom')
+            plt.text(index[i], entropy_c[i]+MI[i], str(int(per_cent[i]))+"%", ha='center', va='bottom')
 
-        # Then we add the special case of the studied element itself
-        plt.bar(studied, entropy_studied, width=width_bar, color='blue')
-        
 
-        plt.title(f'Value the shared information with {studied}')
-        plt.xlabel('Index')
+        max_value = np.max(MI+entropy_c)
+
+        plt.title(f'Shared information with {studied}')
         plt.ylabel('Value of information')
         plt.xticks(rotation=45, ha="right", rotation_mode="anchor")
+        plt.legend()
+        plt.ylim(0,max_value*1.2)
+
+
+
+
+    def plot_entropy_fixed(self, fixed:str) :
+
+        index = self.MI.index
+
+        # First, we check if the inputed fixed element is in the model
+        if fixed not in index :
+            raise NameError(f"The input name '{fixed}' isn't in the model !")
+    
+
+        # Matrix of difference of entropy after the fixation of an element
+        delta_entropy = np.abs(self.group_entropy_fixed_vector(elements_to_fixe=fixed)["Delta H"].to_numpy())
+        
+        # Matrix of mutual inforamtion with the fixed element
+        MI = self.MI.loc[fixed].to_numpy()
+        for i in range(len(MI)) :
+            if np.isinf(MI[i]) :
+                MI[i] = 0
+
+        print(MI - delta_entropy)
+
+
+        
+        # width of the bars
+        width_bar = 0.35
+
+        # Positions des barres pour les deux ensembles de données
+        pos1 = np.arange(len(index))
+        pos2 = [pos + width_bar for pos in pos1]
+
+        plt.bar(pos1, MI, width=width_bar, label='MI', color='blue')
+
+        plt.bar(pos2, delta_entropy, width=width_bar, label='Delta H', color="darkorange")
+
+
+        plt.title(f'difference of entropy after fixation {fixed}')
+        plt.ylabel('Value of information')
+        plt.xticks(pos1 + width_bar/2, index, rotation=45, ha="right", rotation_mode="anchor")
         plt.legend()
 
 
@@ -2307,7 +2368,8 @@ class MODEL:
 
 
     def MOO(self) :
-        import MOO
+        from MOO import main
+        main()
         
 
     ################################################################################

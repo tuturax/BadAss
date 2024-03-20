@@ -285,8 +285,6 @@ def evaluate_individual(individual, args, index, fitness_list, thread_lock, thre
     # writing on the same resource from multiple threads at the same time
     thread_lock.acquire()
 
-    print(index)
-
     fitness_list[index] = fitness_function(
         individual, args
     )  # TODO put your evaluation function here, also maybe add logger and thread_id
@@ -304,18 +302,17 @@ def fitness_function(individual, args):
     """
 
     my_model = args["model"]
+    to_modify = args["to_modify"]
+
+    copy_matrix = my_model.elasticity.p.df.copy()
+
+    for i,elasticty in enumerate(to_modify) :
+        copy_matrix.at[elasticty[0], elasticty[1]] = individual[i]
     
-
-    my_model.elasticity.p.df = np.array(individual).reshape(args["shape"])
-
-    
-    #print(f"Fitness Function : {my_model.similarity()}")
-
+    my_model.elasticity.p.df = copy_matrix
 
     fitness_1 = my_model.similarity()
     fitness_2 = my_model.similarity()
-
-    
 
     fitness_values = inspyred.ec.emo.Pareto([fitness_1, fitness_2])
 
@@ -422,22 +419,17 @@ def main():
         my_model.parameters.remove("Temperature")
         my_model.test_real_data()
 
+        modified_elasticity = [["reaction_0","enzyme_reaction_2_para"], ["reaction_1", "meta_3_para"]]
+
         # also create a generator function
         def generator(random, args):
-            # return [random.uniform(-2.0, 2.0) for _ in range(args["n_dimensions"])]
-            n_rows = args["shape"][0]
-            n_cols = args["shape"][1]
             
-            my_model = args["model"]
-            
-            random_elements = [np.random.uniform(-2.0, 2.0) for _ in range(0, n_rows*n_cols)]
+            shape = len(args["to_modify"])  
+
+            random_elements = [np.random.uniform(-1.0, 1.0) for _ in range(0, shape)]
 
             return random_elements
             
-
-
-        print(f"Total number of element in the E_s matrix : {my_model.elasticity.p.df.shape[0] * my_model.elasticity.p.df.shape[1]}\n")
-        print(my_model.similarity())
 
         final_population = ea.evolve(
             generator=generator,
@@ -449,12 +441,11 @@ def main():
             # Do we maximmize the objectif function
             maximize=False,
             # Bounder of the elements that we modify
-            bounder=inspyred.ec.Bounder(-2.0, 2.0),
+            bounder=inspyred.ec.Bounder(-1.0, 1.0),
             # Max number of individuals that we keep = pop_size + num_selected*N_generation
-            max_evaluations=500,
+            max_evaluations=2000,
             # all items below this line go into the 'args' dictionary passed to each function
             logger=args["logger"],
-            shape=my_model.elasticity.p.df.shape,
             n_threads=args["n_threads"],
             population_file_name=args["population_file_name"],
             random_seed=args["random_seed"],
@@ -462,6 +453,8 @@ def main():
             save_at_every_iteration=args["save_at_every_iteration"],
             fitness_names=["fitness_1", "fitness_2"],
             model=my_model,
+            shape=my_model.elasticity.p.df.shape,
+            to_modify = modified_elasticity,
         )
 
     # TODO do something with the best individual
@@ -469,13 +462,13 @@ def main():
 
     best_values = max(final_population).candidate
 
-    shape = my_model.elasticity.p.df.shape
+    best_elasticity_matrix = my_model.elasticity.p.df.copy()
 
-    matrix_best = np.zeros(shape)
-    for i in range(shape[0]):
-        matrix_best[i] = best_values[i*shape[1]:(i+1)*shape[1]]
-    
-    print(matrix_best)
+    for i,elasticity in enumerate(modified_elasticity) :
+        best_elasticity_matrix.at[elasticity[0], elasticity[1]] = best_values[i]
+
+
+    print(best_elasticity_matrix)
     # close logger
     close_logging(logger)
     
