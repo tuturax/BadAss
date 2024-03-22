@@ -11,7 +11,7 @@ ACt2r	ac_e_ + h_e_ <=> ac_c_ + h_c_	acetate reversible transport via proton symp
 ADK1	amp_c_ + atp_c_ <=> 2 adp_c_	adenylate kinase	ADK1	R00127	True
 AKGDH	akg_c_ + coa_c_ + nad_c_ <=> co2_c_ + nadh_c_ + succoa_c_	2-Oxoglutarate dehydrogenase	AKGDH	R08549	True
 ATPM	atp_c_ + h2o_c_ <=> adp_c_ + h_c_ + pi_c_	ATP maintenance requirement	ATPM	R00086	True
-Biomass_Ecoli_core_w_GAM	1.50 _3pg_c_ + 3.75 accoa_c_ + 59.81 atp_c_ + 0.36 e4p_c_ + 0.07 f6p_c_ + 0.13 g3p_c_ + 0.20 g6p_c_ + 0.26 gln_c_ + 4.94 glu_c_ + 59.81 h2o_c_ + 3.55 nad_c_ + 13.03 nadph_c_ + 1.79 oaa_c_ + 0.52 pep_c_ + 2.83 pyr_c_ + 0.90 r5p_c_ <=> 59.81 adp_c_ + 4.12 akg_c_ + 3.75 coa_c_ + 59.81 h_c_ + 3.55 nadh_c_ + 13.03 nadp_c_ + 59.81 pi_c_	Biomass Objective Function with GAM	Biomass_Ecoli_core_w_GAM		True
+BIOMASS_Ecoli_core_w_GAM	1.50 _3pg_c_ + 3.75 accoa_c_ + 59.81 atp_c_ + 0.36 e4p_c_ + 0.07 f6p_c_ + 0.13 g3p_c_ + 0.20 g6p_c_ + 0.26 gln_c_ + 4.94 glu_c_ + 59.81 h2o_c_ + 3.55 nad_c_ + 13.03 nadph_c_ + 1.79 oaa_c_ + 0.52 pep_c_ + 2.83 pyr_c_ + 0.90 r5p_c_ <=> 59.81 adp_c_ + 4.12 akg_c_ + 3.75 coa_c_ + 59.81 h_c_ + 3.55 nadh_c_ + 13.03 nadp_c_ + 59.81 pi_c_	Biomass Objective Function with GAM	BIOMASS_Ecoli_core_w_GAM		True
 CO2t	co2_e_ <=> co2_c_	CO2 transporter via diffusion	CO2t		True
 CS	accoa_c_ + h2o_c_ + oaa_c_ <=> cit_c_ + coa_c_ + h_c_	citrate synthase	CS	R00351	True
 CYTBD	2 h_c_ + 0.50 o2_c_ + q8h2_c_ <=> h2o_c_ + 2 h_e_ + q8_c_	cytochrome oxidase bd (ubiquinol-8: 2 protons)	CYTBD		True
@@ -198,7 +198,7 @@ ACt2r	0.70474976	0.63875313
 ADK1	0.89920412	0.1767767			
 AKGDH	0.51854497	0.29698485			
 ATPM	0.90627519	0.3123055			
-Biomass_Ecoli_core_w_GAM	0.62932504	0.16852712			
+BIOMASS_Ecoli_core_w_GAM	0.62932504	0.16852712			
 CO2t	0.36651701	0.24159482			
 CS	0.65053824	0.41601449			
 CYTBD	0.61753992	0.68353656			
@@ -323,7 +323,7 @@ rate of reaction	ACt2r	-0.21148523
 rate of reaction	ADK1	-0.021766273			
 rate of reaction	AKGDH	0.11904906			
 rate of reaction	ATPM	-0.61003222			
-rate of reaction	Biomass_Ecoli_core_w_GAM	0.026323057			
+rate of reaction	BIOMASS_Ecoli_core_w_GAM	0.026323057			
 rate of reaction	CO2t	-0.69497405			
 rate of reaction	CS	0.154			
 rate of reaction	CYTBD	1.487766			
@@ -383,7 +383,7 @@ Gibbs free energy of reaction	ACt2r	2.478957
 Gibbs free energy of reaction	ADK1	11.323747			
 Gibbs free energy of reaction	AKGDH	-43.904117			
 Gibbs free energy of reaction	ATPM	9.1273568			
-Gibbs free energy of reaction	Biomass_Ecoli_core_w_GAM	-412.2847			
+Gibbs free energy of reaction	BIOMASS_Ecoli_core_w_GAM	-412.2847			
 Gibbs free energy of reaction	CO2t	2.4789569			
 Gibbs free energy of reaction	CS	-26.444567			
 Gibbs free energy of reaction	CYTBD	-2.4789569			
@@ -443,7 +443,7 @@ equilibrium constant	ACt2r	0.4383259
 equilibrium constant	ADK1	0.002126			
 equilibrium constant	AKGDH	92370			
 equilibrium constant	ATPM	0.003509			
-equilibrium constant	Biomass_Ecoli_core_w_GAM	121.7			
+equilibrium constant	BIOMASS_Ecoli_core_w_GAM	121.7			
 equilibrium constant	CO2t	0.40265893			
 equilibrium constant	CS	99990			
 equilibrium constant	CYTBD	2.625803			

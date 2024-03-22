@@ -909,8 +909,13 @@ class MODEL:
 
         for i in range(Cov.shape[0]):
             for j in range(Cov.shape[1]):
-                rho[i][j] = Cov[i][j] / ((Cov[i][i] * Cov[j][j]) ** 0.5)
-
+                rho_temp = Cov[i][j] / ((Cov[i][i] * Cov[j][j]) ** 0.5)
+                # Conditional to avoid correlation coeff that are out of bound because of computational error
+                if rho_temp > 1 :
+                    rho_temp = 1
+                elif rho_temp < -1 :
+                    rho_temp = -1
+                rho[i][j] = rho_temp
         # Line to retablish the warning
         np.seterr(divide="warn", invalid="warn")
 
@@ -1961,16 +1966,16 @@ class MODEL:
 
     #############################################################################
     #############   Function to display the escher map  #########################
-    def escher_meta(self, studied="atp_c", result= "rho", model_json= '../Exemples/SBTab/e_coli_model.json', map_json = './../Exemples/SBTab/e_coli_core_map.json'):
+    def escher_information(self, studied="atp_c", result= "rho", model_json= '../Exemples/SBTab/e_coli_model.json', map_json = './../Exemples/SBTab/e_coli_core_map.json'):
         ### Description of the fonction
         """
-        Fonction display the Escher map
+        Fonction display the information shared or correlation between elements on the Escher map
         
         Parameters
         ----------
 
         studied : str
-            Name of the central metabolite\n
+            Name of the central element\n
         
         result : str
             type of the display result (by default the correlation)\n
@@ -2009,49 +2014,62 @@ class MODEL:
         
 
 
+
         # Change of the scale of the circle displayed
         if result.lower() == "mi" :
 
             builder.metabolite_scale = [
             { 'type': 'value', 'value': 0.0, 'color': 'rgba(100, 100, 100, 0.0)', 'size': 20},
-            { 'type': 'max'  ,               'color': 'rgba(  0,   0, 100, 1.0)', 'size': 40}
-            ]
+            { 'type': 'max'  ,               'color': 'rgba(  0,   0, 100, 1.0)', 'size': 40} ]
 
+            builder.reaction_scale = [
+            { 'type': 'value', 'value': 0.0, 'color': 'rgba(  0, 0,   0, 1.0)', 'size':  0},
+            { 'type': 'max'  ,               'color': 'rgba(  0, 0, 100, 1.0)', 'size': 40}]
 
         else :
-            """
-            builder.metabolite_scale = [
-            { 'type': 'value', 'value': -1.0, 'color': 'rgba(100, 0,   0, 1.0)', 'size': 40},
-            { 'type': 'value', 'value':  0.0, 'color': 'rgba(100, 0, 100, 0.0)', 'size': 20},
-            { 'type': 'value', 'value':  1.0, 'color': 'rgba(  0, 0, 100, 1.0)', 'size': 40}
-            ]"""
 
             builder.metabolite_scale = [
-            { 'type': 'min'  ,               'color': 'rgba(100, 0,   0, 1.0)', 'size': 40},
-            { 'type': 'value', 'value': 0.0, 'color': 'rgba(100, 0, 100, 0.0)', 'size': 20},
-            { 'type': 'max'  ,               'color': 'rgba(  0, 0, 100, 1.0)', 'size': 40}
-            ]
+            { 'type': 'value', 'value':-1.0, 'color': 'rgba(100, 0,   0, 1.0)', 'size': 40},
+            { 'type': 'value', 'value': 0.0, 'color': 'rgba(100, 0, 100, 0.0)', 'size':  0},
+            { 'type': 'value', 'value': 1.0, 'color': 'rgba(  0, 0, 100, 1.0)', 'size': 40}]
+
+            builder.reaction_scale = [
+            { 'type': 'value', 'value':-1.0, 'color': 'rgba(100, 0,   0, 1.0)', 'size': 40},
+            { 'type': 'value', 'value': 0.0, 'color': 'rgba(100, 0, 100, 0.0)', 'size':  0},
+            { 'type': 'value', 'value': 1.0, 'color': 'rgba(  0, 0, 100, 1.0)', 'size': 40}]
 
 
-        dict_value = {}
+        dict_value_meta = {}
 
-        # For every metabolite of the model
+        # For every metabolite of the model (even the external one)
         for meta in self.metabolites.df.index :
             # If the metabolite is internal
             if not self.metabolites.df.at[meta, "External"] :
-                dict_value[meta] = matrix.at[studied, meta]
+                dict_value_meta[meta] = matrix.at[studied, meta]
             else :
-                dict_value[meta] = matrix.at[studied, meta+"_para"]
+                dict_value_meta[meta] = matrix.at[studied, meta+"_para"]
+
+
+
+        dict_value_flux = {}
+        # For every reaction of the model
+        for flux in self.reactions.df.index :
+            # We add its value of the intersection of the matrix between the flux and the element
+            dict_value_flux[flux] = matrix.at[studied, flux]
 
         # Implementation of the value to the escher builder
-        builder.metabolite_data = dict_value
+        builder.metabolite_data = dict_value_meta
+        builder.reaction_data = dict_value_flux
 
-        # If the metabolite aren't in the model, then they are not display
+        # If some metabolites aren't in the model, then they are not display
         builder.metabolite_no_data_size = 5
         builder.metabolite_no_data_color = 'rgba(100, 100, 100, 1.0)'
 
+        # If some reactions aren't in the model, then they are not display
+        builder.reaction_no_data_size = 5
+        builder.reaction_no_data_color = 'rgba(100, 100, 100, 1.0)'
 
-
+        Builder.reaction_scale_preset
 
         from IPython.display import display
         display(builder)
