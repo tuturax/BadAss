@@ -357,7 +357,7 @@ def numpy_best_archiver(random, population, archive, args):
     return new_archive
 
 
-def main():
+def main(my_model, modified_elasticity, elasticity_value):
     # there are a lot of moving parts inside an EA, so some modifications will still need to be performed by hand
 
     # a few hard-coded values, to be changed depending on the problem
@@ -407,19 +407,23 @@ def main():
         ea.observer = observer
         ea.logger = args["logger"]
 
-        from main import MODEL
 
-        my_model = MODEL()
-        my_model.creat_linear(4)
+        old_value = []
+        # Creation of a correlation matrix with other elasticity
+        for i,elasticity in enumerate(modified_elasticity) :
+            old_value.append(my_model.elasticity.p.get_value(elasticity[0], elasticity[1]))
+            my_model.elasticity.p.change(flux_name=elasticity[0], parameter_name=elasticity[1], value=elasticity_value[i])
 
-        my_model.enzymes.add_to_all_reaction()
-        my_model.parameters.add_externals()
-        my_model.parameters.add_enzymes()
-        my_model.elasticity.s.half_satured()
-        my_model.parameters.remove("Temperature")
-        my_model.test_real_data()
 
-        modified_elasticity = [["reaction_0","enzyme_reaction_2_para"], ["reaction_1", "meta_3_para"]]
+        rho_matrix = my_model.correlation.to_numpy()
+        # Then we set this matrix as the real data's correlation matrix
+        my_model.set_real_data(rho_matrix=rho_matrix)
+
+        # Creation of a correlation matrix with other elasticity
+        for i,elasticity in enumerate(modified_elasticity) :
+            my_model.elasticity.p.change(flux_name=elasticity[0], parameter_name=elasticity[1], value=old_value[i])
+        
+        
 
         # also create a generator function
         def generator(random, args):
@@ -443,7 +447,7 @@ def main():
             # Bounder of the elements that we modify
             bounder=inspyred.ec.Bounder(-1.0, 1.0),
             # Max number of individuals that we keep = pop_size + num_selected*N_generation
-            max_evaluations=2000,
+            max_evaluations=1000,
             # all items below this line go into the 'args' dictionary passed to each function
             logger=args["logger"],
             n_threads=args["n_threads"],
@@ -467,8 +471,16 @@ def main():
     for i,elasticity in enumerate(modified_elasticity) :
         best_elasticity_matrix.at[elasticity[0], elasticity[1]] = best_values[i]
 
-
+    print()
+    print()
+    print("Best elasticity : ")
     print(best_elasticity_matrix)
+
+    print()
+    print()
+    print("Best correlation matrix : ")
+    print(my_model.correlation)
+
     # close logger
     close_logging(logger)
     

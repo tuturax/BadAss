@@ -1530,33 +1530,22 @@ class MODEL:
             return entropy
     """
 
-    #################################################################################
-    ############    Function that return the Mutual Inforamtion matrix   ############
-    def objective(self, variable1: str, variable2: str):
-        ### Description of the fonction
+
+
+    def affine_transormation(self, A : np.ndarray) :
         """
-        Fonction to return an objective function that represent the difference between 
+        Fonction to apply an affine transforamtion on the multivariate normal distribution
+        y = Ax + b
 
-        variable1, variable2 : string of the name of the variable that we want to compute the mutual information
+        A     : Matrix of affine dependency
 
         """
-        Cov_df = self.covariance
+        cov = self.__covariance
 
-        MI = (1 / (2 * np.log(2))) * np.log(
-            Cov_df.at[variable1, variable1]
-            * Cov_df.at[variable2, variable2]
-            / (
-                Cov_df.at[variable1, variable1] * Cov_df.at[variable2, variable2]
-                - Cov_df.at[variable1, variable2] * Cov_df.at[variable2, variable1]
-            )
-        )
-        return MI
+        if A.shape[1] != cov.shape[0] :
+            raise IndexError(f"The size of the second dimension of A ({A.shape[1]}) must fit with the size of the first one of the covariance matrix ({cov.shape[0]})")
 
-
-
-
-
-
+        return np.dot(A, np.dot(cov, A.T))
 
 
 
@@ -2318,7 +2307,7 @@ class MODEL:
     #                                                                              #
     ################################################################################
 
-    def test_real_data(self) :
+    def set_real_data(self, rho_matrix = None) :
         ### Description of the fonction
         """
         Fonction to create fake real data 
@@ -2340,21 +2329,31 @@ class MODEL:
                 for i,reaction in enumerate(self.metabolites.df.index) :
                     self.real_data[key].at[reaction, "Concentration"] = self.real_data[key].at[reaction, "Concentration"] + error[i]
 
+
             elif key == "Correlation" :
-                self.real_data[key] = self.covariance.copy()
+                self.real_data[key] = self.correlation.copy()
 
-                a = np.random.uniform(-1.0, 1.0, size=self.covariance.shape)
-                b = np.dot(a, a.T)
+
+
+                if rho_matrix is not None :
+                    self.real_data[key].values[:] = rho_matrix
+
+                else :
+                    a = np.random.uniform(-1.0, 1.0, size=self.covariance.shape)
+                    b = np.dot(a, a.T)
 
                 
-                for i in range(len(self.parameters.df.index)) :
-                    for j in range(len(self.parameters.df.index)) :
-                        b[i][j] = 0
+                    for i in range(len(self.parameters.df.index)) :
+                        for j in range(len(self.parameters.df.index)) :
+                            b[i][j] = 0
 
-                for i in range(b.shape[0]) :
-                    b[i][i] = 1
+                    for i in range(b.shape[0]) :
+                        b[i][i] = 1
+
+                    self.real_data[key].values[:] = b
                 
-                self.real_data[key].values[:] = b
+
+                    
                 
                 
             
@@ -2385,10 +2384,35 @@ class MODEL:
             return sim_tot
 
 
-    def MOO(self) :
+    def MOO(self, modified_elasticity, elasticity_value) :
         from MOO import main
-        main()
+
+        main(self, modified_elasticity, elasticity_value)
         
+
+    #################################################################################
+    ############    Function that return the Mutual Inforamtion matrix   ############
+    def objective(self, variable1: str, variable2: str):
+        ### Description of the fonction
+        """
+        Fonction to return an objective function that represent the difference between 
+
+        variable1, variable2 : string of the name of the variable that we want to compute the mutual information
+
+        """
+        Cov_df = self.covariance
+
+        MI = (1 / (2 * np.log(2))) * np.log(
+            Cov_df.at[variable1, variable1]
+            * Cov_df.at[variable2, variable2]
+            / (
+                Cov_df.at[variable1, variable1] * Cov_df.at[variable2, variable2]
+                - Cov_df.at[variable1, variable2] * Cov_df.at[variable2, variable1]
+            )
+        )
+        return MI
+
+
 
     ################################################################################
     #                                                                              #

@@ -92,3 +92,27 @@ class Elasticity_p_class:
 
         if para_to_remove_from_E_p != []:
             self.df.drop(columns=para_to_remove_from_E_p, inplace=True)
+
+
+    #################################################################################
+    #########     Fonction to get the value of the elasticity coeff        ##########
+    def get_value(self, flux:str, parameter:str) -> float : 
+        ### Description of the fonction
+        """
+        Fonction to remove an enzyme to the model
+
+        Parameters
+        ----------
+
+        flux       : str
+            Name of the flux \n
+        
+        parameter  : str
+            Name of the parameter
+        """
+        if flux not in self.df.index :
+            raise NameError(f"The flux name {flux} is not in the elasticity matrix\n")
+        if parameter not in self.df.columns :
+            raise NameError(f"The parameter name {parameter} is not in the model\n")
+        
+        return self.df.at[flux, parameter]
