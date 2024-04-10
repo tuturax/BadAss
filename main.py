@@ -101,6 +101,9 @@ class MODEL:
         # Frequency of the system
         self.__frequency_omega = 0.0
 
+        # Time of computation
+        self.__computation_time = {}
+
         # Cache of the Network
         self.__cache_Link_matrix = None
         self.__cache_Reduced_Stoichio_matrix = None
@@ -113,6 +116,7 @@ class MODEL:
         self.__cache_R_v_p = None
         self.__cache_R_s_c = None
         self.__cache_R_v_p = None
+        self.__cache_R = None
 
         # Cache cache :)
         self.__cache_rho = None
@@ -212,8 +216,12 @@ class MODEL:
 
     @property
     def Link_matrix(self):
-        # If the value isn't None, return the cache value
-        if self.__cache_Link_matrix is None:
+
+
+        # If the value is None, we recompute the link matrix and the reduced soichiometric matrix
+        if (self.__cache_Link_matrix is None) or (self.__cache_Reduced_Stoichio_matrix is None):
+            # First, we set to 0 the Jacobian matrix that mostly depend of it
+            self.__cache_Jacobian = None
             # Definition of a local stoichio matrix that will change gradually in the property
             N = self.N_without_ext
             # .copy() ?
@@ -242,6 +250,7 @@ class MODEL:
 
             self.__cache_Link_matrix = L
             self.__cache_Reduced_Stoichio_matrix = Nr
+        
 
         return (self.__cache_Link_matrix, self.__cache_Reduced_Stoichio_matrix)
 
@@ -273,13 +282,32 @@ class MODEL:
     # Jacobian
     @property  # Core
     def __Jacobian(self) :
+
+        self.__computation_time = {}
+        
+        
         self._update_elasticity()
+
+        t_0 = time.time()
+
+        
         if self.__cache_Jacobian is None:
+            
             # Reset of the cache value of the inversed matrix of J
             self.__cache_Reversed_Jacobian = None
+            # Reset of the cache value of the MCA coeff
+            self.__cache_R_s_p = None
+            self.__cache_R_v_p = None
+            self.__cache_R_s_c = None
+            self.__cache_R_v_p = None
 
+            t_0 = time.time()
             # Compute of the J matrix
             L, Nr = self.Link_matrix
+            self.__computation_time["Link Matrix computation"] =  time.time() - t_0
+
+            t_0 = time.time()
+            # Conversion of the matrix to the scipy sparse matrix format
             L = csr_matrix(L)
             Nr = csr_matrix(Nr.to_numpy(dtype="float64"))
             E_s = csr_matrix(self.elasticity.s.df.to_numpy(dtype="float64"))
@@ -290,6 +318,8 @@ class MODEL:
             if self.frequency_omega != 0:
                 self.__cache_Jacobian = self.__cache_Jacobian - eye(self.__cache_Jacobian.shape[0], dtype=complex) * self.frequency_omega * 1j
         
+            self.__computation_time["Jacobian computation"] =  time.time() - t_0
+
         return self.__cache_Jacobian.toarray()
 
     @property  # Displayed
@@ -302,19 +332,19 @@ class MODEL:
     # Inverse of the Jacobian
     @property  # Core
     def __Jacobian_reversed(self):
-        
+
+        t_0 = time.time()
+
         if self.__cache_Reversed_Jacobian is None:
-            # Reset of the cache value of the MCA coeff
-            self.__cache_R_s_p = None
-            self.__cache_R_v_p = None
-            self.__cache_R_s_c = None
-            self.__cache_R_v_p = None
+
 
             # Compute the J-1 matrix
             J_inv = np.linalg.pinv(self.__Jacobian)
 
             # Then we attribute to the cache value of the link matrix the new value
             self.__cache_Reversed_Jacobian = J_inv
+
+        self.__computation_time["Jacobian Reversion"] =  time.time() - t_0
 
         return self.__cache_Reversed_Jacobian
 
@@ -328,19 +358,25 @@ class MODEL:
 
     ##############################################
     # Response coefficient : MCA
+    
+    # Sub-Matrices responses
 
     # R_s_p
     @property  # Core
     def __R_s_p(self):
+
         if self.__cache_R_s_p is None:
+            # reset of the total R matrix
+            self.__cache_R = None
+
             E_p = self.elasticity.p.df.to_numpy(dtype="float64")
             C = -np.dot(
-                np.dot(self.Link_matrix[0], self.__Jacobian_reversed),
-                self.Link_matrix[1],
-            )
+                self.Link_matrix[0], 
+                np.linalg.solve(self.__Jacobian, self.Link_matrix[1])
+                        )
 
             self.__cache_R_s_p = np.dot(C, E_p)
-
+        
         return self.__cache_R_s_p
 
     @property  # Displayed
@@ -355,10 +391,16 @@ class MODEL:
     # R_v_p
     @property  # Core
     def __R_v_p(self):
+        
         if self.__cache_R_v_p is None:
+            # reset of the total R matrix
+            self.__cache_R = None
+
             self.__cache_R_v_p = np.dot(
                 self.elasticity.s.df.to_numpy(dtype="float64"), self.__R_s_p
             ) + self.elasticity.p.df.to_numpy(dtype="float64")
+        
+
 
         return self.__cache_R_v_p
 
@@ -373,14 +415,16 @@ class MODEL:
     # R_s_c
     @property  # Core
     def __R_s_c(self):
+
         if self.__cache_R_s_c is None:
+            # reset of the total R matrix
+            self.__cache_R = None
+
             self.__cache_R_s_c = -np.dot(
-                self.Jacobian_reversed,
-                np.dot(
-                    self.Stoichio_matrix_np,
-                    self.elasticity.s.df.to_numpy(dtype="float64"),
-                ),
-            ) + np.identity(len(self.Stoichio_matrix_np))
+                np.linalg.solve(self.Jacobian, self.Stoichio_matrix_np), 
+                self.elasticity.s.df.to_numpy(dtype="float64"),
+                ) 
+            + np.identity(len(self.Stoichio_matrix_np))
 
         return self.__cache_R_s_c
 
@@ -401,6 +445,9 @@ class MODEL:
     @property  # Core
     def __R_v_c(self):
         if self.__cache_R_v_c is None:
+            # reset of the total R matrix
+            self.__cache_R = None
+
             self.__cache_R_v_c = np.dot(self.elasticity.s.df.to_numpy(dtype="float64"), self.__R_s_c)
         return self.__cache_R_v_c
 
@@ -416,9 +463,16 @@ class MODEL:
     # Big matrix of response R
     @property  # Core
     def __R(self):
-        R = np.block([[self.__R_s_p], [self.__R_v_p]])
 
-        return R
+        t_0 = time.time()
+        
+        # R is block matrix of the sub-response matrix
+        if self.__cache_R is None:
+            self.__cache_R = np.block([[self.__R_s_p], [self.__R_v_p]])
+        
+        self.__computation_time["R computation"] = time.time() - t_0
+
+        return self.__cache_R
 
     @property  # Displayed
     def R(self):
@@ -432,6 +486,8 @@ class MODEL:
             columns=self.parameters.df.index,
         )
 
+    def test(self) :
+        print(self.__cache_Jacobian)
     #########################################
     # Standard deviation of parameters vector
     @property
@@ -442,11 +498,14 @@ class MODEL:
     # Covariance matrix
     @property  # Core
     def __covariance(self):
+
+        t_0 = time.time()
         # If the cache is empty, we recompute the cov matrix and atribute the result to the cache value
 
         if self.__cache_cov is None:
+
             # First, we get the response matrix as a local variable to avoid a call of function everytime.
-            R = self.__R
+            R = self.R
 
             # We creat a identity matrix to represent the covarience matrix of the parameters
             covariance_dp = np.identity(len(self.__Standard_deviations))
@@ -481,18 +540,21 @@ class MODEL:
 
             self.__cache_cov = Cov
 
+        self.__computation_time["Covariance"] =  time.time() - t_0
+
         # Then we return the cache value
         return self.__cache_cov
 
     @property  # Displayed
     def covariance(self):
-
+        # R as a local variable to avoid many call
+        R = self.R
         # Return the dataframe of the covariance matrix by a call of it
         return pd.DataFrame(
             self.__covariance,
-            index=(self.R.columns.to_list() + self.R.index.to_list()),
-            columns=(self.R.columns.to_list() + self.R.index.to_list()),
-        )
+            index=(R.columns.to_list() + R.index.to_list()),
+            columns=(R.columns.to_list() + R.index.to_list())
+            )
 
     ################
     # Entropy matrix
@@ -662,7 +724,7 @@ class MODEL:
 
     ######################################################################################
     #                                                                                    #
-    # find # reset # setter # update #                                                   #
+    # find # reset # setter # update # time                                              #
     #                                                                                    #
     ######################################################################################
     #                                                                                    #
@@ -713,8 +775,8 @@ class MODEL:
             self.__cache_R_s_c = None
             self.__cache_R_v_p = None
 
-        self.__cache_Link_matrix = None
-        self.__cache_Reduced_Stoichio_matrix = None
+        #self.__cache_Link_matrix = None
+        #self.__cache_Reduced_Stoichio_matrix = None
         self.__cache_cov = None
         self.__cache_h = None
         self.__cache_joint_h = None
@@ -811,6 +873,8 @@ class MODEL:
         Function to update the elasticities matrices of the model after a direct modification of the stoichiometric matrix
         or reaction and metabolite dataframes
         """
+
+        t_0 = time.time()
         
         if self.activate_update :
             ###
@@ -846,7 +910,7 @@ class MODEL:
             self.elasticity.s.enzyme = pd.DataFrame(0, columns=colonnes, index=index)
             self.elasticity.s.regulation = pd.DataFrame(0, columns=colonnes, index=index)
 
-
+            
 
             ##################################
             # Then we deal with the parameters
@@ -878,8 +942,13 @@ class MODEL:
 
             self._reset_value()
 
+        self.__computation_time["Update elasticity"] =  time.time() - t_0
 
 
+
+    def time(self) :
+        df = pd.DataFrame.from_dict(self.__computation_time, orient='index', columns=['Time (s)'])
+        return(df)
 
 
     ########################################################################################
@@ -3100,6 +3169,20 @@ class MODEL:
         if positif == True:
             print("The jacobian matrix have positives eigen values, that could lead to an unstable state")
         return eigen_values
+
+    def plot_eigen(self, xlim=(-1.1,0.1)):
+        data = self.check_unstable()
+        # Extraction des parties réelles et imaginaires des nombres complexes
+        real_part = [num.real for num in data]
+        imag_part = [num.imag for num in data]
+
+        # Tracer les nombres complexes sur le plan imaginaire
+        plt.scatter(real_part, imag_part, color='blue', marker='o')
+        plt.xlabel('Re')
+        plt.ylabel('Im')
+        plt.grid(True)
+        plt.xlim(xlim)
+        plt.show()
 
 
     #############################################################################

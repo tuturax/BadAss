@@ -48,19 +48,28 @@ class Sub_Elasticity_class:
 
     @df.setter
     def df(self, matrix):
+        # If the new matrix is a np one
         if type(matrix) == type(np.ndarray([])):
+            # If the new matrix don't have the same shape as the previous one
             if matrix.shape != self.df.shape:
+                # Then we report an error
                 raise IndexError(
                     "The shape of your input matrix isn't matching with the elasticity matrix"
                 )
+            # Else, we atribute the value of the np matrix to the elasticity dataframe
             else:
                 self.__df.values[:] = matrix
+                # And we reset the value of the Jacobian (and everything downstream with a waterfall effect)
                 self.__class_MODEL_instance._reset_value(session="E_s")
 
+        # If the new matrix is a dataframe
         elif type(matrix) == type(pd.DataFrame()):
+            # We attribute this dataframe as the new elasticity matrix
             self.__df = matrix
+            # And we reset the value of the Jacobian (and everything downstream with a waterfall effect)
             self.__class_MODEL_instance._reset_value(session="E_s")
 
+        # If the new matrix is neither a np or pd one, we report an error
         else:
             raise TypeError(
                 "Please enter a numpy matrix or Pandas dataframe to fill the E_s matrix"
