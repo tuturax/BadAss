@@ -283,15 +283,13 @@ class MODEL:
     @property  # Core
     def __Jacobian(self) :
 
-        self.__computation_time = {}
-        
-        
-        self._update_elasticity()
 
-        t_0 = time.time()
 
         
         if self.__cache_Jacobian is None:
+
+            self.__computation_time = {}
+            t_0 = time.time()
             
             # Reset of the cache value of the inversed matrix of J
             self.__cache_Reversed_Jacobian = None
@@ -300,6 +298,8 @@ class MODEL:
             self.__cache_R_v_p = None
             self.__cache_R_s_c = None
             self.__cache_R_v_p = None
+            self.__cache_R = None
+            
 
             t_0 = time.time()
             # Compute of the J matrix
@@ -317,9 +317,9 @@ class MODEL:
             # Case of a frequency response
             if self.frequency_omega != 0:
                 self.__cache_Jacobian = self.__cache_Jacobian - eye(self.__cache_Jacobian.shape[0], dtype=complex) * self.frequency_omega * 1j
-        
-            self.__computation_time["Jacobian computation"] =  time.time() - t_0
 
+            self.__computation_time["Jacobian computation"] =  time.time() - t_0
+        
         return self.__cache_Jacobian.toarray()
 
     @property  # Displayed
@@ -365,18 +365,26 @@ class MODEL:
     @property  # Core
     def __R_s_p(self):
 
+        J = self.__Jacobian
+        
+
         if self.__cache_R_s_p is None:
+            
             # reset of the total R matrix
             self.__cache_R = None
+            
+            E_p = self.elasticity.p.df.copy().to_numpy(dtype="float64")
 
-            E_p = self.elasticity.p.df.to_numpy(dtype="float64")
             C = -np.dot(
                 self.Link_matrix[0], 
-                np.linalg.solve(self.__Jacobian, self.Link_matrix[1])
+                np.linalg.solve(J , self.Link_matrix[1])
                         )
+            
+            R_s_p = np.dot(C, E_p)
 
-            self.__cache_R_s_p = np.dot(C, E_p)
-        
+            self.__cache_R_s_p = R_s_p
+
+
         return self.__cache_R_s_p
 
     @property  # Displayed
@@ -416,12 +424,14 @@ class MODEL:
     @property  # Core
     def __R_s_c(self):
 
+        J = self.__Jacobian
+
         if self.__cache_R_s_c is None:
             # reset of the total R matrix
             self.__cache_R = None
 
             self.__cache_R_s_c = -np.dot(
-                np.linalg.solve(self.Jacobian, self.Stoichio_matrix_np), 
+                np.linalg.solve(J , self.Stoichio_matrix_np), 
                 self.elasticity.s.df.to_numpy(dtype="float64"),
                 ) 
             + np.identity(len(self.Stoichio_matrix_np))
@@ -466,9 +476,17 @@ class MODEL:
 
         t_0 = time.time()
         
+        R_s_p = self.__R_s_p
+        R_v_p = self.__R_v_p
+
         # R is block matrix of the sub-response matrix
         if self.__cache_R is None:
-            self.__cache_R = np.block([[self.__R_s_p], [self.__R_v_p]])
+
+            # We reset the value of the correlation
+            self.__cache_cov = None
+            # And we create the total matrix
+            R = np.block([[R_s_p], [R_v_p]])
+            self.__cache_R = R
         
         self.__computation_time["R computation"] = time.time() - t_0
 
@@ -486,8 +504,7 @@ class MODEL:
             columns=self.parameters.df.index,
         )
 
-    def test(self) :
-        print(self.__cache_Jacobian)
+
     #########################################
     # Standard deviation of parameters vector
     @property
@@ -503,9 +520,10 @@ class MODEL:
         # If the cache is empty, we recompute the cov matrix and atribute the result to the cache value
 
         if self.__cache_cov is None:
-
-            # First, we get the response matrix as a local variable to avoid a call of function everytime.
-            R = self.R
+            # First we reset the value of the correlation
+            self.__cache_rho = None
+            # Second, we get the response matrix as a local variable to avoid a call of function everytime.
+            R = self.__R
 
             # We creat a identity matrix to represent the covarience matrix of the parameters
             covariance_dp = np.identity(len(self.__Standard_deviations))
@@ -754,6 +772,7 @@ class MODEL:
     #############   Function reset some the values of the model  ################
     def _reset_value(self, session=""):
         if session.lower() == "e_s":
+            
             # Reset the value of the cache data
             self.__cache_Jacobian = None
             self.__cache_Reversed_Jacobian = None
@@ -953,7 +972,7 @@ class MODEL:
 
     ########################################################################################
     #                                                                                      #
-    # grouped # MI # fixed # rho # joint # entropy # conditional # objectif # MI # entropy #
+    # grouped # MI # fixed # rho # joint # entropy # conditional # MI # entropy            #
     #                                                                                      #
     ########################################################################################
     #                                                                                      #
@@ -2368,7 +2387,7 @@ class MODEL:
 
     ################################################################################
     #                                                                              #
-    # objectif function  #  real data # cost                                       #
+    # objectif function  #  real data # cost # fitness                             #
     #                                                                              #
     ################################################################################
     #                                                                              #
@@ -2422,8 +2441,16 @@ class MODEL:
                     self.real_data[key].values[:] = b
                 
 
-                    
-                
+
+    def fitness(self, a=1) :
+
+        diff_rho = self.__correlation - self.real_data["Correlation"]
+        
+        norm = np.linalg.norm(diff_rho, ord=2)
+
+        fitness = np.power(norm-0.5, 2)*a  
+        # a*(x-0.5)²
+        return(fitness)
                 
             
     def similarity(self, only_Cov = True) :
@@ -2453,10 +2480,10 @@ class MODEL:
             return sim_tot
 
 
-    def MOO(self, modified_elasticity, elasticity_value) :
+    def MOO(self, modified_elasticity, elasticity_value, print_result=False) :
         from MOO import main
 
-        main(self, modified_elasticity, elasticity_value)
+        main(self, modified_elasticity, elasticity_value, print_result)
         
 
     #################################################################################

@@ -37,12 +37,15 @@ class Elasticity_p_class:
     def df(self, matrix):
         # If the new matrix is a numpy matrix, its shape must be exactly the same as the previous dataframe
         if isinstance(matrix, np.ndarray):
+            # If it is not the case, we report an error
             if matrix.shape != self.df.shape:
                 raise IndexError(
                     "The shape of your matrix isn't matching with the elasticity matrix"
                 )
             else:
+                # Else, we atribute the value of the np matrix to the elasticity dataframe
                 self.__df.values[:] = matrix
+                # And we reset the value of the MCA matrices
                 self.__class_MODEL_instance._reset_value(session="e_p")
 
         # If the new matrix is a dataframe, it's shape must be N_reaction X N_parameters

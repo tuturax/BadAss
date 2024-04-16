@@ -304,15 +304,18 @@ def fitness_function(individual, args):
     my_model = args["model"]
     to_modify = args["to_modify"]
 
-    copy_matrix = my_model.elasticity.p.df.copy()
+    copy_matrix = my_model.elasticity.s.df.copy()
 
-    for i,elasticty in enumerate(to_modify) :
-        copy_matrix.at[elasticty[0], elasticty[1]] = individual[i]
+    for i,elasticity in enumerate(to_modify) :
+        copy_matrix.at[elasticity[0], elasticity[1]] = individual[i]
     
-    my_model.elasticity.p.df = copy_matrix
+    
+    my_model.elasticity.s.df = copy_matrix
+
+    #my_model.Jacobian
 
     fitness_1 = my_model.similarity()
-    fitness_2 = my_model.similarity()
+    fitness_2 = my_model.fitness()
 
     fitness_values = inspyred.ec.emo.Pareto([fitness_1, fitness_2])
 
@@ -357,7 +360,7 @@ def numpy_best_archiver(random, population, archive, args):
     return new_archive
 
 
-def main(my_model, modified_elasticity, elasticity_value):
+def main(my_model, modified_elasticity, elasticity_value, print_result = True):
     # there are a lot of moving parts inside an EA, so some modifications will still need to be performed by hand
 
     # a few hard-coded values, to be changed depending on the problem
@@ -408,22 +411,23 @@ def main(my_model, modified_elasticity, elasticity_value):
         ea.logger = args["logger"]
 
 
-        old_value = []
+        # Keep in memeory the old value of elasticity
+        old_elasticity = my_model.elasticity.s.df.copy().to_numpy()
+
         # Creation of a correlation matrix with other elasticity
         for i,elasticity in enumerate(modified_elasticity) :
-            old_value.append(my_model.elasticity.p.get_value(elasticity[0], elasticity[1]))
-            my_model.elasticity.p.change(flux_name=elasticity[0], parameter_name=elasticity[1], value=elasticity_value[i])
-
-
+            my_model.elasticity.s.change(flux_name=elasticity[0], metabolite_name=elasticity[1], value=elasticity_value[i])
         rho_matrix = my_model.correlation.to_numpy()
+
         # Then we set this matrix as the real data's correlation matrix
         my_model.set_real_data(rho_matrix=rho_matrix)
 
-        # Creation of a correlation matrix with other elasticity
-        for i,elasticity in enumerate(modified_elasticity) :
-            my_model.elasticity.p.change(flux_name=elasticity[0], parameter_name=elasticity[1], value=old_value[i])
+
+        # Creation of a correlation matrix with the old elasticity coeff
+        my_model.elasticity.s.df = old_elasticity
         
-        
+        # Then we deactivate the auto update and check of the model when element are modified
+        my_model.activate_update = False
 
         # also create a generator function
         def generator(random, args):
@@ -447,7 +451,7 @@ def main(my_model, modified_elasticity, elasticity_value):
             # Bounder of the elements that we modify
             bounder=inspyred.ec.Bounder(-1.0, 1.0),
             # Max number of individuals that we keep = pop_size + num_selected*N_generation
-            max_evaluations=1000,
+            max_evaluations=4000,
             # all items below this line go into the 'args' dictionary passed to each function
             logger=args["logger"],
             n_threads=args["n_threads"],
@@ -457,7 +461,7 @@ def main(my_model, modified_elasticity, elasticity_value):
             save_at_every_iteration=args["save_at_every_iteration"],
             fitness_names=["fitness_1", "fitness_2"],
             model=my_model,
-            shape=my_model.elasticity.p.df.shape,
+            shape=my_model.elasticity.s.df.shape,
             to_modify = modified_elasticity,
         )
 
@@ -466,20 +470,21 @@ def main(my_model, modified_elasticity, elasticity_value):
 
     best_values = max(final_population).candidate
 
-    best_elasticity_matrix = my_model.elasticity.p.df.copy()
+    best_elasticity_matrix = my_model.elasticity.s.df.copy()
 
     for i,elasticity in enumerate(modified_elasticity) :
         best_elasticity_matrix.at[elasticity[0], elasticity[1]] = best_values[i]
 
-    print()
-    print()
-    print("Best elasticity : ")
-    print(best_elasticity_matrix)
+    if print_result :
+        print()
+        print()
+        print("Best elasticity : ")
+        print(best_elasticity_matrix)
 
-    print()
-    print()
-    print("Best correlation matrix : ")
-    print(my_model.correlation)
+        print()
+        print()
+        print("Best correlation matrix : ")
+        print(my_model.correlation)
 
     # close logger
     close_logging(logger)
