@@ -1,7 +1,7 @@
 BadAsss Git - Biological Analysis Designed for Steady-State System under uncertainties
 =================
 
-Python package designed for the creation and analysis of metabolic systems under uncertainty. A [full tutorial](./Notebooks/exemple_linear.ipynb) of options is available.
+Python package designed for the creation and analysis of metabolic systems under uncertainties. A [full tutorial](./Notebooks/exemple_linear.ipynb) of options is available.
 
 ## Contact me
 
