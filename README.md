@@ -1,5 +1,7 @@
-# BadAsss Git
-## Biological Analysis designed for A Sterady-State System
+BadAsss Git
+=================
+
+Python package designed for the creation and analysis of metabolic systems under uncertainty. A [full tutorial](./Notebooks/exemple_linear.ipynb) of options is available.
 
 ## Contact me
 
