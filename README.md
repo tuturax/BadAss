@@ -1,7 +1,15 @@
 # BadAsss Git
 ## Biological Analysis designed for A Sterady-State System
 
-# Welcome to the Arthur's GitHub
+## Contact me
+
+<div>
+  <a href="mailto: arthurleq@gmail.com">
+    <img
+      src="https://img.shields.io/badge/gmail-red?style=for-the-badge&logo=gmail&logoColor=white"
+    />
+  </a>
+</div>
 
 # Import the module
 
