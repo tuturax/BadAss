@@ -1,4 +1,4 @@
-BadAsss Git
+BadAsss Git - Biological Analysis Designed for Steady-State System under uncertainties
 =================
 
 Python package designed for the creation and analysis of metabolic systems under uncertainty. A [full tutorial](./Notebooks/exemple_linear.ipynb) of options is available.
@@ -13,19 +13,5 @@ Python package designed for the creation and analysis of metabolic systems under
   </a>
 </div>
 
-# Import the module
 
-# Creat a model by calling the main class model()
-
-# To visualize the stoichiometric matrix, use .Stoichio_matrix
-# To visualize the reactions, use .reactions.df
-# To visualize the metabolites, use .metabolites.df
-
-# To add a reaction, use .reactions.add()
-# To add a metabolite, use .metabolites.add()
-
-# To remove a reaction, use .reactions.remove()
-# To remove a metabolite, use .metabolites.remove()
-
-# Removing a reaction could lead to unused metabolite, same for the opposite
-# Use the .check method to check the unuse metabolites and reactions
+[Arthur Lequertier](https://github.com/tuturax/)
