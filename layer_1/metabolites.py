@@ -75,7 +75,7 @@ class Metabolite_class:
             else : 
                 self.df.loc[name] = [external, concentration, unit]
 
-                # If there is no reaction in the columns of the soichio metric matrix, we keep in memeory the metabolite
+                # If there is no reaction in the columns of the soichio metric matrix, we keep in memory the metabolite
                 if self.__class_MODEL_instance.Stoichio_matrix_pd.columns.size == 0:
                     self.__cache_meta.append(name)
                     print("Don't worry, the metabolite will be add after the add of the 1st reaction")

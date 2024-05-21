@@ -1,10 +1,11 @@
 """
-Created on Tue Sep 26 08:26:49 2023
-
 Script for the creation of metabolic network and study of transmition of information throught it.
 
 @author: tuturax (Arthur Lequertier)
 INRAE, MaIAGE
+
+memo : Ctrl + K then Ctrl + C to put lines in comment
+       Ctrl + K then Ctrl + U to remove the comments
 """
 
 ##################################################################################
@@ -46,11 +47,28 @@ from layer_1.elasticities import Elasticity_class
 from layer_1.enzymes import Enzymes_class
 from layer_1.regulation import Regulation_class
 from layer_1.operon import Operon_class
+from layer_1.proteins import Proteins_class
 
 
-#####################
-# Class MODEL
-#####################
+####################################################################################
+#         #  CLASS MODEL  #  CLASS MODEL  #  CLASS MODEL  #  CLASS MODEL  #        #
+#        # #             # #             # #             # #             # #       #
+#       #   #           #   #           #   #           #   #           #   #      #
+#      #     #         #     #         #     #         #     #         #     #     #
+#     #       #       #       #       #       #       #       #       #       #    #
+#    #         #     #         #     #         #     #         #     #         #   #
+#   #           #   #           #   #           #   #           #   #           #  #
+#  #             # #             # #             # #             # #             # #
+# #  CLASS MODEL  # CLASS MODEL   #  CLASS MODEL  #  CLASS MODEL  #  CLASS MODEL  ##
+#  #             # #             # #             # #             # #             # #
+#   #           #   #           #   #           #   #           #   #           #  #
+#    #         #     #         #     #         #     #         #     #         #   #
+#     #       #       #       #       #       #       #       #       #       #    #
+#      #     #         #     #         #     #         #     #         #     #     #
+#       #   #           #   #           #   #           #   #           #   #      #
+#        # #             # #             # #             # #             # #       #
+#         #  CLASS MODEL  #  CLASS MODEL  #  CLASS MODEL  #  CLASS MODEL  #        #
+####################################################################################
 class MODEL:
     #############################################################################
     ########   Class method to creat a model from stochi matrix    ##############
@@ -81,6 +99,8 @@ class MODEL:
         self.__regulations = Regulation_class(self)
         # Call of operon Class
         self.__operons = Operon_class(self)
+        # Call of protein Class
+        self.__proteins = Proteins_class(self)
 
         ################################
         #  Initialisation of few variables of the model
@@ -134,8 +154,84 @@ class MODEL:
 
     #############################################################################
     ##################              Getter                  #####################
+    
+    #function to get a list of every element of a certain type 
+    def get(self, type:str, sub_type:str) :
+
+        # If the user want the metabolite
+        if type.lower()[0] == "m" :
+            list_meta = self.metabolites.df.index
+            # if the subtype is external
+            if sub_type.lower()[0] == "e" :
+                list_meta_ext = []
+                for meta in list_meta :
+                    if self.metabolites.df.at[meta, "External"] :
+                        list_meta_ext.append(meta)
+                return(list_meta_ext)
+            # if the subtype is internal
+            elif sub_type.lower()[0] == "i" :
+                list_meta_int = []
+                for meta in list_meta :
+                    if self.metabolites.df.at[meta, "External"] == False :
+                        list_meta_int.append(meta)
+                return(list_meta_int)
+            # Else, the user want every metabolite
+            else :
+                return(list_meta)
+        
+        # If the user want the reaction (or flux)
+        if type.lower()[0] == "r" or type.lower()[0] == "f" :
+            list_flux = self.reactions.df.index
+            return(list_flux)
+        
+        # If the user want the protein
+        if type.lower()[0] == "p" :
+            list_prot = self.proteins.df.index 
+            # if the subtype is TF
+            if sub_type.lower()[0] == "t" :
+                list_prot_TF = []
+                for prot in list_prot :
+                    if self.proteins.df .at[prot, "Type"] == "TF" :
+                        list_prot_TF.append(prot)
+                return(list_prot_TF)
+            # if the subtype is enzyme
+            elif sub_type.lower()[0] == "e" :
+                list_prot_enzyme = []
+                for prot in list_prot :
+                    if self.proteins.df .at[prot, "Type"] == "enzyme" :
+                        list_prot_enzyme.append(prot)
+                return(list_prot_enzyme)
+            # Else, we retunr every protein
+            else :
+                return(list_prot)
+
+
     @property
     def Stoichio_matrix_pd(self) -> pd.DataFrame :
+        
+        def get_priority(index):
+            list_TF = self.get("prot", "TF")
+            list_enzymes = self.get("prot", "enzyme")
+            list_meta = self.get("meta", "int")
+
+            if index in list_TF:
+                return 1
+            elif index in list_enzymes:
+                return 2
+            elif index in list_meta:
+                return 3
+            else:
+                return 4
+            
+        # Creation of a temporary column in order to sort the elemetns of the stoichio matrix 
+        self.__Stoichio_matrix_pd['priority'] = self.__Stoichio_matrix_pd.index.map(get_priority)
+
+        # sort
+        self.__Stoichio_matrix_pd.sort_values(by='priority', inplace=True)
+
+        # delete of the temporary column 
+        self.__Stoichio_matrix_pd.drop(columns=['priority'], inplace=True)
+
         return self.__Stoichio_matrix_pd
 
     @property
@@ -152,14 +248,14 @@ class MODEL:
 
     @property
     def N_without_ext(self) -> pd.DataFrame :
-        N = self.N.copy()
+        N_ext = self.N.copy()
 
-        # We check if every metabolite is external
-        for meta in self.Stoichio_matrix_pd.index:
-            if self.metabolites.df.at[meta, "External"] == True:
-                # And remove this metabolite from the local stoichio matrix N
-                N = N.drop(meta)
-        return N
+        list_meta_ext = self.get("meta", "ext")
+
+        for meta_ext in list_meta_ext :
+                N_ext.drop(meta_ext, axis=0, inplace=True)
+
+        return N_ext
 
     @property
     def __N_without_ext(self) -> np.ndarray :
@@ -175,6 +271,19 @@ class MODEL:
             raise TypeError("The attribute of the model 'activate_update' must be a bool\n")
         else:
             self.__activate_update = value
+
+    @property
+    def activate_proteomics(self):
+        return self.activate_proteomics
+    
+    @activate_proteomics.setter
+    def activate_proteomics(self, value) :
+        if not isinstance(value, bool) :
+            raise TypeError("The attribute of the model 'activate_proteomics' must be a bool\n")
+        else :
+            # TODO
+            self.__activate_proteomics = value
+
 
     @property
     def frequency_omega(self):
@@ -207,12 +316,20 @@ class MODEL:
         return self.__operons
 
     @property
+    def proteins(self):
+        return self.__proteins
+
+    @property
     def regulations(self):
         return self.__regulations
 
     @property
     def elasticity(self):
         return self.__elasticities
+
+
+
+
 
     @property
     def Link_matrix(self):
@@ -282,9 +399,6 @@ class MODEL:
     # Jacobian
     @property  # Core
     def __Jacobian(self) :
-
-
-
         
         if self.__cache_Jacobian is None:
 
@@ -1754,6 +1868,13 @@ class MODEL:
         plt.plot(x_p, y_p, "black", linewidth=line_width)
         plt.plot(y_p, x_p, "black", linewidth=line_width)
 
+        N_meta = self.N_without_ext.shape[0] + N_para
+        # Position of the line
+        x_m = [-0.5, N_meta - 0.5]
+        y_m = [N_meta - 0.5, N_meta - 0.5]
+        plt.plot(x_m, y_m, "black", linewidth=line_width)
+        plt.plot(y_m, x_m, "black", linewidth=line_width)
+
         plt.colorbar()
         plt.show()
 
@@ -3182,7 +3303,7 @@ class MODEL:
     #############################################################################
     ##########   Function to check the jacobian of the model   ##################
     @property
-    def check_unstable(self) :
+    def check_unstable(self) -> np.ndarray :
         """
         Function that check if the BadAss model is unstable
         """
@@ -3198,13 +3319,17 @@ class MODEL:
         return eigen_values
 
     def plot_eigen(self, xlim=(-1.1,0.1)):
-        data = self.check_unstable()
+        data = self.check_unstable
         # Extraction des parties réelles et imaginaires des nombres complexes
         real_part = [num.real for num in data]
         imag_part = [num.imag for num in data]
 
         # Tracer les nombres complexes sur le plan imaginaire
         plt.scatter(real_part, imag_part, color='blue', marker='o')
+        
+        plt.axhline(0, color='black', linestyle='-', linewidth=0.9)
+        plt.axvline(0, color='black', linestyle='-', linewidth=0.9)
+
         plt.xlabel('Re')
         plt.ylabel('Im')
         plt.grid(True)
